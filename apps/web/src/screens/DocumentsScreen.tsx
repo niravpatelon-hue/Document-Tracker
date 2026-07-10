@@ -10,6 +10,7 @@ import {
 } from '@domain/ocr/fieldparser';
 import { formatAmount } from '@domain/money';
 import { CATEGORY_LABEL, COLORS } from '../theme';
+import { Card, Icon, IconChip, SectionLabel, categoryVisual } from '../components/ui';
 import type { WebDocument, WebGroup } from '../store';
 import { SAMPLE_RECEIPT_TEXT } from '../seed';
 import { extractTextFromFile } from '../extract';
@@ -173,38 +174,41 @@ export default function DocumentsScreen({
           </View>
         ) : (
           <Pressable style={styles.primary} onPress={() => setScanning(true)}>
-            <Text style={styles.primaryText}>+ Scan a document</Text>
+            <Icon name="camera" color="#fff" size={19} />
+            <Text style={styles.primaryText}>Scan a document</Text>
           </Pressable>
         )}
 
-        <Text style={styles.sectionTitle}>Your documents</Text>
+        <SectionLabel>Your documents</SectionLabel>
         {documents.length === 0 ? (
-          <Text style={styles.empty}>No documents yet.</Text>
+          <Card><Text style={styles.empty}>No documents yet.</Text></Card>
         ) : (
-          documents.map((doc) => (
-            <View key={doc.id} style={styles.row}>
-              <View style={styles.rowLeft}>
-                <Text style={styles.rowTitle}>
-                  {doc.vendor ?? doc.label ?? CATEGORY_LABEL[doc.category]}
-                </Text>
-                <Text style={styles.rowSub}>
-                  {CATEGORY_LABEL[doc.category]}
-                  {doc.dateISO ? ` · ${doc.dateISO}` : ''} ·{' '}
-                  {doc.ocrMode === 'cloud' ? 'Cloud OCR' : doc.ocrMode === 'manual' ? 'Manual' : 'On-device OCR'}
-                </Text>
-              </View>
-              <View style={styles.rowRight}>
-                {doc.totalCents != null ? (
-                  <Text style={styles.rowAmount}>${formatAmount(doc.totalCents)}</Text>
-                ) : null}
-                {doc.category === 'bills_receipts' && doc.totalCents != null ? (
-                  <Pressable onPress={() => setSplitDoc(doc)} style={styles.splitBtn}>
-                    <Text style={styles.splitLink}>Split</Text>
-                  </Pressable>
-                ) : null}
-              </View>
-            </View>
-          ))
+          <Card>
+            {documents.map((doc, i) => {
+              const vis = categoryVisual(doc.category);
+              return (
+                <View key={doc.id} style={[styles.row, i > 0 && styles.divider]}>
+                  <IconChip name={vis.icon} bg={vis.bg} fg={vis.fg} size={38} />
+                  <View style={styles.rowLeft}>
+                    <Text style={styles.rowTitle}>{doc.vendor ?? doc.label ?? CATEGORY_LABEL[doc.category]}</Text>
+                    <Text style={styles.rowSub}>
+                      {CATEGORY_LABEL[doc.category]}
+                      {doc.dateISO ? ` · ${doc.dateISO}` : ''} ·{' '}
+                      {doc.ocrMode === 'cloud' ? 'Cloud OCR' : doc.ocrMode === 'manual' ? 'Manual' : 'On-device OCR'}
+                    </Text>
+                  </View>
+                  <View style={styles.rowRight}>
+                    {doc.totalCents != null ? <Text style={styles.rowAmount}>${formatAmount(doc.totalCents)}</Text> : null}
+                    {doc.category === 'bills_receipts' && doc.totalCents != null ? (
+                      <Pressable onPress={() => setSplitDoc(doc)} style={styles.splitBtn}>
+                        <Text style={styles.splitLink}>Split</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                </View>
+              );
+            })}
+          </Card>
         )}
       </ScrollView>
 
@@ -256,11 +260,11 @@ export default function DocumentsScreen({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.bg },
-  scroll: { padding: 16, paddingBottom: 8 },
-  banner: { backgroundColor: COLORS.warnBg, borderRadius: 10, padding: 12, marginBottom: 14 },
-  bannerText: { color: COLORS.warnText, fontSize: 13, lineHeight: 18 },
-  panel: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, padding: 12, marginBottom: 8 },
+  container: { flex: 1, backgroundColor: COLORS.screenBg },
+  scroll: { padding: 16, paddingBottom: 16 },
+  banner: { backgroundColor: '#eef6ff', borderWidth: 1, borderColor: '#dbeafe', borderRadius: 12, padding: 12, marginBottom: 14 },
+  bannerText: { color: '#1e40af', fontSize: 13, lineHeight: 18 },
+  panel: { backgroundColor: '#fff', borderWidth: 1, borderColor: COLORS.border, borderRadius: 16, padding: 14, marginBottom: 8 },
   busy: { alignItems: 'center', paddingVertical: 18, gap: 8 },
   busyText: { color: COLORS.text, fontWeight: '600' },
   busyHint: { color: COLORS.subtext, fontSize: 12 },
@@ -279,20 +283,18 @@ const styles = StyleSheet.create({
   link: { color: COLORS.primary, fontWeight: '600', marginTop: 8, fontSize: 14 },
   center: { textAlign: 'center' },
   error: { color: COLORS.danger, marginTop: 8, fontWeight: '600' },
-  primary: { backgroundColor: COLORS.primary, borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginTop: 10 },
+  primary: { backgroundColor: COLORS.primary, borderRadius: 12, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, marginTop: 10 },
   primaryDisabled: { opacity: 0.5 },
   primaryText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  sectionTitle: { fontSize: 13, fontWeight: '700', color: COLORS.subtext, marginTop: 20, marginBottom: 8, textTransform: 'uppercase' },
   empty: { color: COLORS.subtext },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
   },
-  rowLeft: { flex: 1, paddingRight: 8 },
+  divider: { borderTopWidth: 1, borderTopColor: COLORS.border },
+  rowLeft: { flex: 1, paddingHorizontal: 12 },
   rowTitle: { fontSize: 16, fontWeight: '600', color: COLORS.text },
   rowSub: { fontSize: 12, color: COLORS.subtext, marginTop: 2 },
   rowRight: { alignItems: 'flex-end' },
