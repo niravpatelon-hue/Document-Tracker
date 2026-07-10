@@ -12,7 +12,9 @@
   "dependencies": {
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "react-native-web": "^0.19.13"
+    "react-native-web": "^0.19.13",
+    "tesseract.js": "^5.1.1",
+    "tesseract.js-core": "^5.1.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",

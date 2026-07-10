@@ -23,6 +23,10 @@ export interface ReviewPrefill {
   totalCents: number | null;
   taxCents: number | null;
   dateISO: string;
+  imei: string | null;
+  serial: string | null;
+  productName: string | null;
+  retailer: string | null;
   imageDataUrl: string | null;
   rawText: string;
   ocrMode: 'on_device' | 'cloud' | 'manual';

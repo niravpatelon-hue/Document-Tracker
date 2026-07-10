@@ -1,6 +1,7 @@
 import {
   detectImei,
   detectSerial,
+  extractLabeledValue,
   extractReceiptFields,
   findFirstDate,
   guessCategory,
@@ -93,6 +94,20 @@ describe('IMEI / serial detection', () => {
   it('reads a labeled serial number', () => {
     expect(detectSerial('Serial No: ABC12345')).toBe('ABC12345');
     expect(detectSerial('S/N xyz98765')).toBe('XYZ98765');
+  });
+});
+
+describe('extractLabeledValue', () => {
+  const warranty = 'LIMITED WARRANTY\nProduct: Acme Phone X\nIMEI: 490154203237518';
+
+  it('extracts a labeled field value', () => {
+    expect(extractLabeledValue(warranty, ['product'])).toBe('Acme Phone X');
+    expect(extractLabeledValue('Model - XPS 13', ['model'])).toBe('XPS 13');
+    expect(extractLabeledValue('Sold by: Best Buy', ['retailer', 'sold by'])).toBe('Best Buy');
+  });
+
+  it('returns null when no label matches', () => {
+    expect(extractLabeledValue(warranty, ['retailer', 'store'])).toBeNull();
   });
 });
 

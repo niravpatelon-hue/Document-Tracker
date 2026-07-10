@@ -10,6 +10,8 @@ import type { DocumentCategory } from '@domain/ocr/fieldparser';
 
 export type OcrMode = 'on_device' | 'cloud' | 'manual';
 
+export type DocDetails = Record<string, string | number | null>;
+
 export interface WebDocument {
   id: string;
   createdAt: number;
@@ -23,6 +25,10 @@ export interface WebDocument {
   ocrMode: OcrMode;
   rawText: string;
   fuzzyDupKey: string | null;
+  /** Display name for non-receipt categories (product / issuer). */
+  label: string | null;
+  /** Category-specific fields (warranty identifier/duration, loyalty balance…). */
+  details: DocDetails;
 }
 
 export interface WebTransaction {
@@ -43,6 +49,8 @@ export interface CreateDocInput {
   imageDataUrl: string | null;
   ocrMode: OcrMode;
   rawText: string;
+  label?: string | null;
+  details?: DocDetails;
 }
 
 export interface PersistedState {
@@ -75,7 +83,14 @@ export function buildDocument(input: CreateDocInput): {
       ? buildFuzzyKey(input.vendor, input.dateISO, input.totalCents)
       : null;
 
-  const doc: WebDocument = { id, createdAt: Date.now(), ...input, fuzzyDupKey };
+  const doc: WebDocument = {
+    id,
+    createdAt: Date.now(),
+    ...input,
+    label: input.label ?? null,
+    details: input.details ?? {},
+    fuzzyDupKey,
+  };
 
   let txn: WebTransaction | null = null;
   if (receipt && input.totalCents != null && input.vendor && input.dateISO) {

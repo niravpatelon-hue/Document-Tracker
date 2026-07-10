@@ -16,6 +16,8 @@ export function seedState(): PersistedState {
       ocrMode: 'cloud',
       rawText: "TRADER JOE'S\nTotal 42.87",
       fuzzyDupKey: "trader joe s|2026-07-04|4287",
+      label: null,
+      details: {},
     },
     {
       id: 'seed-2',
@@ -30,6 +32,8 @@ export function seedState(): PersistedState {
       ocrMode: 'on_device',
       rawText: 'SHELL\nTotal 52.10',
       fuzzyDupKey: 'shell|2026-07-08|5210',
+      label: null,
+      details: {},
     },
   ];
 

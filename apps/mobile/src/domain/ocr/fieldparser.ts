@@ -276,6 +276,26 @@ export function detectSerial(text: string): string | null {
   return m ? m[1]!.toUpperCase() : null;
 }
 
+/**
+ * Extract the value after a labeled field, e.g. "Product: Acme Phone X" or
+ * "Model - XPS 13". Tries each label (case-insensitive) against each line and
+ * returns the trimmed remainder of the first match, or null. Used to pull
+ * product/retailer fields off warranty cards, which no receipt parser handles.
+ */
+export function extractLabeledValue(text: string, labels: string[]): string | null {
+  const lines = text.split(/\r?\n/);
+  for (const line of lines) {
+    for (const label of labels) {
+      const re = new RegExp(`^\\s*${label}\\s*[:#\\-]\\s*(.+)$`, 'i');
+      const m = re.exec(line);
+      if (m && m[1] && m[1].trim()) {
+        return m[1].trim();
+      }
+    }
+  }
+  return null;
+}
+
 /** Coarse auto-categorization from raw text (Feature 1 auto-categorize). */
 export function guessCategory(text: string): DocumentCategory {
   const lower = text.toLowerCase();
