@@ -1,4 +1,4 @@
-import { ME, type Expense, type Group, type MileageTrip, type PersistedState, type Settlement, type Budget } from './store';
+import { ME, type Budget, type CardPayment, type CreditCard, type Expense, type Group, type MileageTrip, type PersistedState, type Settlement } from './store';
 
 const DAY = 86_400_000;
 
@@ -132,7 +132,24 @@ export function seedState(): PersistedState {
     { id: 'b-groc', category: 'Groceries', period: 'monthly', limitCents: 800000, alertThresholdPct: 80 },
   ];
 
-  return { expenses, groups, settlements, mileage, budgets };
+  const cards: CreditCard[] = [
+    {
+      id: 'card-hdfc', name: 'HDFC Regalia', network: 'visa', last4: '4291',
+      limitCents: 50000000, outstandingCents: 8745000, statementCents: 8745000,
+      dueDateISO: '2026-07-18', apr: 42, createdAt: now - DAY * 200,
+    },
+    {
+      id: 'card-axis', name: 'Axis Ace', network: 'rupay', last4: '7702',
+      limitCents: 20000000, outstandingCents: 14230000, statementCents: 14230000,
+      dueDateISO: '2026-07-14', apr: 40, createdAt: now - DAY * 120,
+    },
+  ];
+
+  const cardPayments: CardPayment[] = [
+    { id: 'cp-1', cardId: 'card-hdfc', amountCents: 5000000, dateISO: '2026-06-20', note: 'Statement payment', createdAt: now - DAY * 20 },
+  ];
+
+  return { expenses, groups, settlements, mileage, budgets, cards, cardPayments };
 }
 
 /** A realistic receipt blob for the "use sample" scan button — parsed by the real field parser. */

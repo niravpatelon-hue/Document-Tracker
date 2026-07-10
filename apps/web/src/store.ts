@@ -105,6 +105,35 @@ export interface Budget {
   alertThresholdPct: number;
 }
 
+export type CardNetwork = 'visa' | 'mastercard' | 'rupay' | 'amex';
+
+export interface CreditCard {
+  id: string;
+  name: string;
+  network: CardNetwork;
+  last4: string;
+  limitCents: number;
+  /** Current amount owed on the card. */
+  outstandingCents: number;
+  /** Total due on the latest statement (may be <= outstanding). */
+  statementCents?: number;
+  /** Next payment due date, ISO. */
+  dueDateISO: string;
+  /** Annual interest rate percentage (for optimize hints). */
+  apr?: number;
+  color?: string;
+  createdAt: number;
+}
+
+export interface CardPayment {
+  id: string;
+  cardId: string;
+  amountCents: number;
+  dateISO: string;
+  note?: string;
+  createdAt: number;
+}
+
 export interface WebUser {
   name: string;
   email: string;
@@ -164,6 +193,8 @@ export interface PersistedState {
   settlements: Settlement[];
   mileage: MileageTrip[];
   budgets: Budget[];
+  cards: CreditCard[];
+  cardPayments: CardPayment[];
 }
 
 const STORAGE_KEY = 'expense-split-app-v2';
@@ -177,7 +208,7 @@ export function newId(): string {
 }
 
 export function emptyState(): PersistedState {
-  return { expenses: [], groups: [], settlements: [], mileage: [], budgets: [] };
+  return { expenses: [], groups: [], settlements: [], mileage: [], budgets: [], cards: [], cardPayments: [] };
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -221,6 +252,8 @@ function normalizeState(raw: any): PersistedState {
     settlements: Array.isArray(raw?.settlements) ? raw.settlements : [],
     mileage: Array.isArray(raw?.mileage) ? raw.mileage : [],
     budgets: Array.isArray(raw?.budgets) ? raw.budgets : [],
+    cards: Array.isArray(raw?.cards) ? raw.cards : [],
+    cardPayments: Array.isArray(raw?.cardPayments) ? raw.cardPayments : [],
   };
 }
 
