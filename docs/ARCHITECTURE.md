@@ -1,8 +1,11 @@
 # Document Tracker — Architecture & Technical Design
 
-Status: **Design phase (Phase 0)** — no application code yet. This document turns the
-product spec into concrete technical decisions so implementation (starting with
-Android, per the build order) can begin without re-litigating architecture mid-build.
+Status: **Design phase (Phase 0)** — no application code yet. **Scope: Android
+only** — iOS has been explicitly dropped from this build. React Native is still
+used by choice (see §2) to keep the option of adding iOS later open, not because
+iOS ships as part of this project. This document turns the product spec into
+concrete technical decisions so implementation can begin without re-litigating
+architecture mid-build.
 
 ## 1. Guiding principles → concrete consequences
 
@@ -12,8 +15,8 @@ one *forces us to decide*, not just what it says.
 | Principle | Consequence |
 |---|---|
 | OCR is buy-not-build | We call a vendor API for structured extraction; we never train/host a model. |
-| No single scanning SDK covers both platforms | Capture is isolated behind a native-module interface; JS/business logic never touches camera APIs directly. |
-| One cross-platform framework | All non-capture code (data, sync, analytics, splitting, UI) is one codebase. |
+| Capture SDKs are native-only | No RN library wraps ML Kit Document Scanner, so capture still goes through a thin native Android module even in an Android-only build; JS/business logic never touches camera APIs directly. |
+| React Native, kept even though only Android ships | All non-capture code (data, sync, analytics, splitting, UI) is one RN/TypeScript codebase — chosen over native Android by explicit product decision, to keep the option of adding iOS later open without a rewrite. |
 | Local-first | The on-device DB is the source of truth for reads; cloud is a replica used for backup + multi-device + multi-user (splitting). The app must be fully usable offline except for splitting (needs other members). |
 | Encrypt incidental account/card numbers | Specific fields (serial/IMEI, loyalty/gift-card account numbers), not whole rows, are encrypted — so search/filter on non-sensitive fields stays fast. |
 | Meter OCR from day one | Every extraction call — on-device or cloud — is logged against a per-user quota *before* the app ever ships a paid tier, so enabling billing later is a config flip, not a rebuild. |
@@ -25,14 +28,14 @@ one *forces us to decide*, not just what it says.
 
 | Layer | Choice | Why | Alternative considered |
 |---|---|---|---|
-| App framework | **React Native + TypeScript** | Largest ecosystem for the specific integrations this app needs (deep-linking, Firebase, Supabase JS client); best-supported local-first DB library (WatermelonDB) targets RN specifically. | Flutter — equally valid; weaker offline-first DB story (Drift/Isar are less battle-tested for this exact sync pattern). |
-| Document capture | **Two thin native modules wrapping each platform's free OS-level document scanner**: Android → ML Kit Document Scanner API (Google Play Services); iOS → VisionKit `VNDocumentCameraViewController`. Both do edge detection, perspective correction, and multi-page capture natively, at zero SDK cost. | Satisfies "two native camera modules" at $0 marginal cost, maintained by the platform vendor, and Android-first fits our build order since ML Kit's scanner ships as a Play Services module today. | Paid cross-platform SDK (Scanbot-class) — revisit only if we need a fully custom capture UI or must support devices without Play Services (see §12 risks). |
+| App framework | **React Native + TypeScript** | Explicit decision: keep RN even with iOS out of scope, to preserve the option of adding iOS later without a rewrite, and to stay on a JS/TS stack (Supabase JS client, WatermelonDB, deep-linking libraries are all mature here). Only an Android build ships. | Fully native Android (Kotlin + Jetpack Compose + Room) — would remove all RN bridge overhead and call ML Kit directly; declined so the iOS option stays open. |
+| Document capture | **One thin native Android module wrapping ML Kit Document Scanner** (Google Play Services) — edge detection, perspective correction, and multi-page capture built in, at zero SDK cost. | Free, maintained by Google, purpose-built for exactly this capture flow. | Paid cross-platform SDK (Scanbot-class) — revisit only if we need a fully custom capture UI or must support devices without Play Services (see §14 risks). |
 | OCR / field extraction | **Veryfi** for Bills & Receipts (purpose-built schema: vendor, tax, total, date — plus ready-made line-item extraction for the deferred itemization phase). **On-device ML Kit Text Recognition + our own field parser** for Warranty & Loyalty documents. | No commercial vendor sells "warranty card" or "loyalty card" structured extraction — those aren't a standardized document type the way receipts are. For those categories we buy raw text OCR and build a thin regex/heuristic layer (dates, IMEI/serial patterns, currency amounts) ourselves. | Mindee/Taggun — comparable receipt vendors, keep as a swap-in behind the same interface if Veryfi pricing/coverage disappoints. |
 | Local DB | **WatermelonDB** (SQLite-backed, reactive, built specifically for offline-first RN apps with a bring-your-own sync endpoint) | Matches "local-first, cloud is backup" directly; reactive queries drive dashboards without a separate cache layer. | Realm — has built-in sync, but MongoDB is retiring Atlas Device Sync; ruled out. |
-| Local DB encryption | SQLCipher-backed SQLite file; DB key stored in Android Keystore / iOS Keychain. | Whole-device-loss protection independent of field-level encryption (§6). | — |
+| Local DB encryption | SQLCipher-backed SQLite file; DB key stored in Android Keystore. | Whole-device-loss protection independent of field-level encryption (§6). | — |
 | Backend | **Supabase** (Postgres + Auth + Storage + Realtime + Edge Functions) | Postgres fits the relational ledger/splitting data; built-in Realtime (via Postgres logical replication) is exactly what live split balances need; Storage covers image backup; Auth covers phone/email/link invites out of the box. Net effect: buy-not-build applied to our own backend, same philosophy as the OCR call. | Fully custom Node/Postgres/Redis — fall back to this only if enterprise data-residency requirements surface later; nothing in this design is Supabase-proprietary at the data-model level, so migration stays possible. |
 | Server-side logic | **Supabase Edge Functions (Deno/TS)** for: OCR proxy, Dell warranty API client, settle-up simplification, push notification dispatch. | Keeps vendor API keys and OAuth secrets server-side; is also the natural metering choke point. | — |
-| Push notifications | FCM (Android first), APNs added in the iOS parity phase. | | |
+| Push notifications | **FCM** (Firebase Cloud Messaging). | Android-only — no APNs. | |
 | Object storage | Supabase Storage (S3-compatible), private buckets, signed URLs. | Cloud copy of originals for backup/multi-device — never the only copy (local-first principle). | |
 
 ## 3. System architecture
@@ -40,7 +43,7 @@ one *forces us to decide*, not just what it says.
 ```mermaid
 flowchart TB
     subgraph Device["Mobile App (React Native)"]
-        Cam["Capture Modules\n(native: ML Kit Doc Scanner / VisionKit)"]
+        Cam["Capture Module\n(native: ML Kit Document Scanner)"]
         OCRClient["OCR Client\n(on-device ML Kit text recognition)"]
         LocalDB["WatermelonDB (SQLite, encrypted)"]
         LocalFiles["Local file store\n(full-res originals)"]
@@ -203,7 +206,7 @@ Fallback is always available at every tier: manual entry overrides any of the ab
 |---|---|---|
 | Venmo | `venmo://paycharge?txn=pay&recipients={username}&amount={amount}&note={note}` | Requires the counterparty's Venmo username on file. |
 | PayPal | `https://paypal.me/{username}/{amount}` | Opens the PayPal app if installed, else web — no API key. |
-| UPI | `upi://pay?pa={vpa}&pn={name}&am={amount}&cu=INR&tn={note}` | OS-level intent on Android, resolves to whichever UPI apps are installed. **iOS has no unified UPI scheme** — each UPI app (GPay, PhonePe, Paytm, …) defines its own custom scheme, so iOS support is a small per-app registry built out during the iOS parity phase, not part of the Android-first build. |
+| UPI | `upi://pay?pa={vpa}&pn={name}&am={amount}&cu=INR&tn={note}` | OS-level intent on Android — the system resolves it to a chooser of whichever UPI apps (GPay, PhonePe, Paytm, …) are installed, no per-app integration needed. |
 
 Settle-up suggestions themselves (which pairs of members should pay whom) use
 standard debt simplification: net each member's balance across the group, then
@@ -217,7 +220,7 @@ result is pushed to all members over Realtime.
 /apps
   /mobile                     React Native app
     /src
-      /capture                native module bridges (Android first, iOS stub)
+      /capture                native module bridge (Android — ML Kit Document Scanner)
       /ocr                    vendor client + on-device fallback + field parser
       /documents               Document CRUD, search, dedup
       /ledger
@@ -253,13 +256,15 @@ result is pushed to all members over Realtime.
 | 1 | Capture engine (Android) + OCR pipeline + minimal auto-populated ledger | ML Kit Doc Scanner, Veryfi integration, on-device fallback, Documents list/search/dedup |
 | 2 | Warranty/Device/Loyalty tracking | Generic `TrackedItem`, lookup tables, status dashboard, reminders, tiered verification incl. Dell API + Apple deep link |
 | 3 | Full spend analysis | Dashboards, trend/YoY/MoM, budgets + alerts, CSV/PDF export bundling originals |
-| 4 | Expense splitting | Groups, all split types, Realtime balances, settle-up deep links (Venmo/PayPal/UPI-Android) |
-| 5 | iOS parity | VisionKit capture bridge, APNs, per-app iOS UPI scheme registry |
+| 4 | Expense splitting | Groups, all split types, Realtime balances, settle-up deep links (Venmo/PayPal/UPI) |
 
 Each phase after Phase 1 reuses the same data model and backend — per the product
 brief, splitting is the only feature that needed the multi-user/realtime backend, and
 that's already in place by Phase 1 (Supabase), so Phase 4 is additive, not a
-migration.
+migration. There is no iOS phase — iOS is out of scope for this build (§ status
+above); if that changes later, the native-module capture boundary and the choice to
+stay on React Native (§2) are specifically what would make adding it an addition
+rather than a rewrite.
 
 ## 14. Open questions / risks to validate during implementation
 

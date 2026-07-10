@@ -1,10 +1,10 @@
 # Document-Tracker
 
-Cross-platform mobile app (Android first, then iOS) for photographing or importing
-bills, receipts, warranty cards, and loyalty/gift-card documents, then automatically
+Android app (built with React Native) for photographing or importing bills,
+receipts, warranty cards, and loyalty/gift-card documents, then automatically
 generating a categorized spend history, expiry-tracked warranties, tracked
 loyalty/gift-card balances, and group expense splitting — all reading from the same
-captured document, entered once.
+captured document, entered once. iOS is out of scope for this build.
 
 ## Status
 
