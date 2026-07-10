@@ -21,6 +21,8 @@ export default defineConfig({
   define: {
     __DEV__: JSON.stringify(false),
     'process.env.NODE_ENV': JSON.stringify('production'),
+    // Some browser builds of libraries (e.g. mammoth/jszip) reference `global`.
+    global: 'globalThis',
   },
   server: {
     // Allow importing the shared domain layer from outside this app's root.

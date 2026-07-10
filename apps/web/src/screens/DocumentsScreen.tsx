@@ -12,7 +12,7 @@ import { formatAmount } from '@domain/money';
 import { CATEGORY_LABEL, COLORS } from '../theme';
 import type { WebDocument } from '../store';
 import { SAMPLE_RECEIPT_TEXT } from '../seed';
-import { ocrImage } from '../ocr';
+import { extractTextFromFile } from '../extract';
 import type { ReviewPrefill } from '../App';
 
 interface Props {
@@ -47,20 +47,17 @@ function buildPrefill(
 }
 
 /** A real <input type=file> rendered inside the react-native-web tree. */
-function FileInput({ onPick, disabled }: { onPick: (dataUrl: string) => void; disabled?: boolean }) {
+function FileInput({ onPick, disabled }: { onPick: (file: File) => void; disabled?: boolean }) {
   return React.createElement('input', {
     type: 'file',
-    accept: 'image/*',
+    accept: 'image/*,application/pdf,.pdf,.docx',
     disabled,
     style: { fontSize: 13, marginTop: 8 },
     onChange: (e: { target: { files: FileList | null } }) => {
       const file = e.target.files?.[0];
-      if (!file) {
-        return;
+      if (file) {
+        onPick(file);
       }
-      const reader = new FileReader();
-      reader.onload = () => onPick(String(reader.result));
-      reader.readAsDataURL(file);
     },
   });
 }
@@ -82,17 +79,17 @@ export default function DocumentsScreen({ documents, onReview, onOpenLedger, onO
     setError(null);
   }
 
-  async function onPickImage(dataUrl: string) {
+  async function onPickFile(file: File) {
     setError(null);
     setBusy(true);
     setStatus('starting');
     setPct(0);
     try {
-      const recognized = await ocrImage(dataUrl, (s, p) => {
+      const { text, imageDataUrl } = await extractTextFromFile(file, (s, p) => {
         setStatus(s);
         setPct(Math.round(p * 100));
       });
-      onReview(buildPrefill(recognized, dataUrl, 'on_device'));
+      onReview(buildPrefill(text, imageDataUrl, 'on_device'));
       reset();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -110,9 +107,10 @@ export default function DocumentsScreen({ documents, onReview, onOpenLedger, onO
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.banner}>
           <Text style={styles.bannerText}>
-            Upload a photo of a receipt, warranty card, or loyalty card — it's read on-device, then
-            auto-categorized and the fields are filled in for you to confirm. (On a phone this is the
-            ML Kit scanner; here it's Tesseract OCR in the browser.)
+            Upload a photo, PDF, or Word (.docx) of a receipt, warranty card, or loyalty card — it's
+            read, auto-categorized, and the fields are filled in for you to confirm. PDFs and Word
+            docs with real text extract exactly; photos use in-browser OCR, so a clear, straight,
+            well-lit image works best (you can always paste the text instead).
           </Text>
         </View>
 
@@ -128,8 +126,8 @@ export default function DocumentsScreen({ documents, onReview, onOpenLedger, onO
               </View>
             ) : (
               <>
-                <Text style={styles.label}>Upload a photo / image of the document</Text>
-                <FileInput onPick={onPickImage} disabled={busy} />
+                <Text style={styles.label}>Upload a photo, PDF, or Word (.docx) document</Text>
+                <FileInput onPick={onPickFile} disabled={busy} />
 
                 <Text style={styles.or}>— or paste the text —</Text>
                 <TextInput
