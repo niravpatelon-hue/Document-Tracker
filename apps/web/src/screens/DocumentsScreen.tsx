@@ -18,8 +18,9 @@ import type { ReviewPrefill } from '../App';
 interface Props {
   documents: WebDocument[];
   onReview: (prefill: ReviewPrefill) => void;
-  onOpenLedger: () => void;
-  onOpenSplit: () => void;
+  onOpenAnalytics: () => void;
+  onOpenTracked: () => void;
+  onOpenGroups: () => void;
 }
 
 /** Build the Review pre-fill by running the real domain categorizer + parsers on OCR text. */
@@ -62,7 +63,13 @@ function FileInput({ onPick, disabled }: { onPick: (file: File) => void; disable
   });
 }
 
-export default function DocumentsScreen({ documents, onReview, onOpenLedger, onOpenSplit }: Props) {
+export default function DocumentsScreen({
+  documents,
+  onReview,
+  onOpenAnalytics,
+  onOpenTracked,
+  onOpenGroups,
+}: Props) {
   const [scanning, setScanning] = useState(false);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -185,11 +192,14 @@ export default function DocumentsScreen({ documents, onReview, onOpenLedger, onO
       </ScrollView>
 
       <View style={styles.footer}>
-        <Pressable style={styles.secondary} onPress={onOpenLedger}>
+        <Pressable style={styles.secondary} onPress={onOpenAnalytics}>
           <Text style={styles.secondaryText}>Spending</Text>
         </Pressable>
-        <Pressable style={styles.secondary} onPress={onOpenSplit}>
-          <Text style={styles.secondaryText}>Split demo</Text>
+        <Pressable style={styles.secondary} onPress={onOpenTracked}>
+          <Text style={styles.secondaryText}>Tracked</Text>
+        </Pressable>
+        <Pressable style={styles.secondary} onPress={onOpenGroups}>
+          <Text style={styles.secondaryText}>Groups</Text>
         </Pressable>
       </View>
     </View>

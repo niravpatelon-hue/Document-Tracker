@@ -6,16 +6,23 @@ import {
   buildDocument,
   findDuplicates,
   loadState,
+  newId,
   saveState,
   type CreateDocInput,
+  type WebBudget,
   type WebDocument,
+  type WebExpense,
+  type WebGroup,
+  type WebSettlement,
   type WebTransaction,
 } from './store';
 import { seedState } from './seed';
 import DocumentsScreen from './screens/DocumentsScreen';
 import ReviewScreen from './screens/ReviewScreen';
-import LedgerScreen from './screens/LedgerScreen';
-import SplitDemoScreen from './screens/SplitDemoScreen';
+import SpendAnalysisScreen from './screens/SpendAnalysisScreen';
+import TrackedItemsScreen from './screens/TrackedItemsScreen';
+import GroupsScreen from './screens/GroupsScreen';
+import GroupDetailScreen from './screens/GroupDetailScreen';
 
 export interface ReviewPrefill {
   category: DocumentCategory;
@@ -35,47 +42,54 @@ export interface ReviewPrefill {
 type Route =
   | { name: 'documents' }
   | { name: 'review'; prefill: ReviewPrefill }
-  | { name: 'ledger' }
-  | { name: 'split' };
+  | { name: 'analytics' }
+  | { name: 'tracked' }
+  | { name: 'groups' }
+  | { name: 'group'; groupId: string };
 
 const TITLES: Record<Route['name'], string> = {
   documents: 'Documents',
   review: 'Review & Save',
-  ledger: 'Spending',
-  split: 'Split demo',
+  analytics: 'Spending',
+  tracked: 'Tracked items',
+  groups: 'Groups',
+  group: 'Group',
 };
 
 export default function App() {
   const [route, setRoute] = useState<Route>({ name: 'documents' });
   const [documents, setDocuments] = useState<WebDocument[]>([]);
   const [transactions, setTransactions] = useState<WebTransaction[]>([]);
+  const [budgets, setBudgets] = useState<WebBudget[]>([]);
+  const [groups, setGroups] = useState<WebGroup[]>([]);
+  const [expenses, setExpenses] = useState<WebExpense[]>([]);
+  const [settlements, setSettlements] = useState<WebSettlement[]>([]);
   const [loaded, setLoaded] = useState(false);
 
-  // Load persisted state (or seed) once.
   useEffect(() => {
-    const state = loadState() ?? seedState();
-    setDocuments(state.documents);
-    setTransactions(state.transactions);
+    const s = loadState() ?? seedState();
+    setDocuments(s.documents ?? []);
+    setTransactions(s.transactions ?? []);
+    setBudgets(s.budgets ?? []);
+    setGroups(s.groups ?? []);
+    setExpenses(s.expenses ?? []);
+    setSettlements(s.settlements ?? []);
     setLoaded(true);
   }, []);
 
-  // Persist on change.
   useEffect(() => {
     if (loaded) {
-      saveState({ documents, transactions });
+      saveState({ documents, transactions, budgets, groups, expenses, settlements });
     }
-  }, [documents, transactions, loaded]);
+  }, [documents, transactions, budgets, groups, expenses, settlements, loaded]);
+
+  const navigate = useCallback((next: Route) => setRoute(next), []);
 
   const addDocument = useCallback(
     (input: CreateDocInput): WebDocument[] => {
       const dupes = findDuplicates(input, documents);
-      if (dupes.length > 0) {
-        const proceed = window.confirm(
-          'This looks like a purchase you already logged. Save anyway?',
-        );
-        if (!proceed) {
-          return dupes;
-        }
+      if (dupes.length > 0 && !window.confirm('This looks like a purchase you already logged. Save anyway?')) {
+        return dupes;
       }
       const { doc, txn } = buildDocument(input);
       setDocuments((prev) => [doc, ...prev]);
@@ -88,7 +102,7 @@ export default function App() {
   );
 
   const canGoBack = route.name !== 'documents';
-  const navigate = useCallback((next: Route) => setRoute(next), []);
+  const goBack = () => navigate(route.name === 'group' ? { name: 'groups' } : { name: 'documents' });
 
   const body = useMemo(() => {
     switch (route.name) {
@@ -97,8 +111,9 @@ export default function App() {
           <DocumentsScreen
             documents={documents}
             onReview={(prefill) => navigate({ name: 'review', prefill })}
-            onOpenLedger={() => navigate({ name: 'ledger' })}
-            onOpenSplit={() => navigate({ name: 'split' })}
+            onOpenAnalytics={() => navigate({ name: 'analytics' })}
+            onOpenTracked={() => navigate({ name: 'tracked' })}
+            onOpenGroups={() => navigate({ name: 'groups' })}
           />
         );
       case 'review':
@@ -106,35 +121,77 @@ export default function App() {
           <ReviewScreen
             prefill={route.prefill}
             onSave={(input) => {
-              const blocked = addDocument(input);
-              if (blocked.length === 0) {
+              if (addDocument(input).length === 0) {
                 navigate({ name: 'documents' });
               }
             }}
             onCancel={() => navigate({ name: 'documents' })}
           />
         );
-      case 'ledger':
-        return <LedgerScreen transactions={transactions} />;
-      case 'split':
-        return <SplitDemoScreen />;
+      case 'analytics':
+        return (
+          <SpendAnalysisScreen
+            transactions={transactions}
+            budgets={budgets}
+            onAddBudget={(b) => setBudgets((prev) => [...prev, { ...b, id: newId() }])}
+            onDeleteBudget={(id) => setBudgets((prev) => prev.filter((x) => x.id !== id))}
+          />
+        );
+      case 'tracked':
+        return <TrackedItemsScreen documents={documents} />;
+      case 'groups':
+        return (
+          <GroupsScreen
+            groups={groups}
+            expenses={expenses}
+            settlements={settlements}
+            onOpenGroup={(groupId) => navigate({ name: 'group', groupId })}
+            onCreateGroup={(g) => {
+              const id = newId();
+              setGroups((prev) => [...prev, { ...g, id }]);
+              navigate({ name: 'group', groupId: id });
+            }}
+          />
+        );
+      case 'group': {
+        const group = groups.find((g) => g.id === route.groupId);
+        if (!group) {
+          return <View style={styles.content} />;
+        }
+        return (
+          <GroupDetailScreen
+            group={group}
+            expenses={expenses.filter((e) => e.groupId === group.id)}
+            settlements={settlements.filter((s) => s.groupId === group.id)}
+            receiptDocs={documents.filter((d) => d.category === 'bills_receipts' && d.totalCents != null)}
+            onAddExpense={(e) => setExpenses((prev) => [{ ...e, id: newId() }, ...prev])}
+            onRecordSettlement={(s) =>
+              setSettlements((prev) => [{ ...s, id: newId() }, ...prev])
+            }
+          />
+        );
+      }
       default:
         return null;
     }
-  }, [route, documents, transactions, navigate, addDocument]);
+  }, [route, documents, transactions, budgets, groups, expenses, settlements, navigate, addDocument]);
 
   return (
     <View style={styles.page}>
       <View style={styles.phone}>
         <View style={styles.header}>
           {canGoBack ? (
-            <Pressable onPress={() => navigate({ name: 'documents' })} style={styles.back}>
+            <Pressable onPress={goBack} style={styles.back}>
               <Text style={styles.backText}>‹ Back</Text>
             </Pressable>
           ) : (
             <View style={styles.back} />
           )}
-          <Text style={styles.headerTitle}>{TITLES[route.name]}</Text>
+          <Text style={styles.headerTitle}>
+            {route.name === 'group'
+              ? groups.find((g) => g.id === route.groupId)?.name ?? 'Group'
+              : TITLES[route.name]}
+          </Text>
           <View style={styles.back} />
         </View>
         <View style={styles.content}>{body}</View>
@@ -147,13 +204,7 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  page: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#eceff3',
-    padding: 16,
-  },
+  page: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#eceff3', padding: 16 },
   phone: {
     width: 400,
     maxWidth: '100%',

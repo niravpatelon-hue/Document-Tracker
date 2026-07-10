@@ -53,9 +53,53 @@ export interface CreateDocInput {
   details?: DocDetails;
 }
 
+export interface WebBudget {
+  id: string;
+  category: string;
+  period: 'monthly' | 'yearly';
+  limitCents: number;
+  alertThresholdPct: number;
+}
+
+export interface WebGroupMember {
+  id: string;
+  name: string;
+  venmo?: string;
+}
+
+export interface WebExpense {
+  id: string;
+  groupId: string;
+  description: string;
+  payerId: string;
+  totalCents: number;
+  splitType: 'equal' | 'percentage' | 'exact' | 'share';
+  allocations: { userId: string; cents: number }[];
+  sourceDocumentId?: string | null;
+}
+
+export interface WebGroup {
+  id: string;
+  name: string;
+  type: 'trip' | 'household' | 'event' | 'other';
+  members: WebGroupMember[];
+}
+
+export interface WebSettlement {
+  id: string;
+  groupId: string;
+  fromUser: string;
+  toUser: string;
+  amount: number;
+}
+
 export interface PersistedState {
   documents: WebDocument[];
   transactions: WebTransaction[];
+  budgets: WebBudget[];
+  groups: WebGroup[];
+  expenses: WebExpense[];
+  settlements: WebSettlement[];
 }
 
 const STORAGE_KEY = 'document-tracker-preview-v1';
