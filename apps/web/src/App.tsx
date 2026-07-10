@@ -8,6 +8,8 @@ import {
   saveState,
   saveUser,
   type Budget,
+  type CardPayment,
+  type CreditCard,
   type Expense,
   type Group,
   type MileageTrip,
@@ -15,13 +17,15 @@ import {
   type WebUser,
 } from './store';
 import { seedState } from './seed';
-import ActivityScreen from './screens/ActivityScreen';
-import ExpensesScreen from './screens/ExpensesScreen';
-import ScanScreen from './screens/ScanScreen';
-import AddExpenseScreen from './screens/AddExpenseScreen';
+import HomeScreen from './screens/HomeScreen';
+import PersonalScreen from './screens/PersonalScreen';
 import GroupsScreen from './screens/GroupsScreen';
 import GroupDetailScreen from './screens/GroupDetailScreen';
-import ReportsScreen from './screens/ReportsScreen';
+import AnalysisScreen from './screens/AnalysisScreen';
+import OptimizeScreen from './screens/OptimizeScreen';
+import CardsScreen from './screens/CardsScreen';
+import ScanScreen from './screens/ScanScreen';
+import AddExpenseScreen from './screens/AddExpenseScreen';
 import MileageScreen from './screens/MileageScreen';
 import AccountScreen from './screens/AccountScreen';
 import LoginScreen from './screens/LoginScreen';
@@ -41,26 +45,29 @@ export interface ScanPrefill {
 
 type Route =
   | { name: 'home' }
-  | { name: 'expenses' }
+  | { name: 'personal' }
   | { name: 'groups' }
   | { name: 'account' }
+  | { name: 'analysis' }
+  | { name: 'optimize' }
+  | { name: 'cards' }
   | { name: 'group'; groupId: string }
   | { name: 'scan' }
   | { name: 'add'; prefill?: ScanPrefill | null; presetGroupId?: string | null; editing?: Expense | null; returnTo?: Route }
-  | { name: 'reports' }
   | { name: 'mileage' };
 
 const TITLES: Record<string, string> = {
-  expenses: 'Expenses',
+  personal: 'Personal',
   groups: 'Groups',
   account: 'Account',
   scan: 'Scan receipt',
-  reports: 'Reports',
   mileage: 'Mileage',
 };
 
-const TAB_ROUTES = new Set(['home', 'expenses', 'groups', 'account']);
-const BACK_ROUTES = new Set(['group', 'scan', 'add', 'reports', 'mileage']);
+const TAB_ROUTES = new Set(['home', 'personal', 'groups', 'analysis', 'account']);
+const BACK_ROUTES = new Set(['group', 'scan', 'add', 'optimize', 'cards', 'mileage']);
+// These screens render their own full-width title, so the app chrome omits it.
+const OWN_HEADER = new Set(['home', 'analysis', 'optimize', 'cards']);
 
 export default function App() {
   const [route, setRoute] = useState<Route>({ name: 'home' });
@@ -69,6 +76,8 @@ export default function App() {
   const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [mileage, setMileage] = useState<MileageTrip[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [cards, setCards] = useState<CreditCard[]>([]);
+  const [cardPayments, setCardPayments] = useState<CardPayment[]>([]);
   const [user, setUser] = useState<WebUser | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -79,40 +88,41 @@ export default function App() {
     setSettlements(s.settlements ?? []);
     setMileage(s.mileage ?? []);
     setBudgets(s.budgets ?? []);
+    setCards(s.cards ?? []);
+    setCardPayments(s.cardPayments ?? []);
     setUser(loadUser());
     setLoaded(true);
   }, []);
 
   useEffect(() => {
     if (loaded) {
-      saveState({ expenses, groups, settlements, mileage, budgets });
+      saveState({ expenses, groups, settlements, mileage, budgets, cards, cardPayments });
     }
-  }, [expenses, groups, settlements, mileage, budgets, loaded]);
+  }, [expenses, groups, settlements, mileage, budgets, cards, cardPayments, loaded]);
 
   const navigate = useCallback((next: Route) => setRoute(next), []);
 
-  const saveExpense = useCallback(
-    (draft: Omit<Expense, 'id' | 'createdAt'>, editingId?: string | null) => {
-      if (editingId) {
-        setExpenses((prev) => prev.map((e) => (e.id === editingId ? { ...e, ...draft, id: e.id, createdAt: e.createdAt } : e)));
-      } else {
-        setExpenses((prev) => [{ ...draft, id: newId(), createdAt: Date.now() }, ...prev]);
-      }
-    },
-    [],
-  );
+  const saveExpense = useCallback((draft: Omit<Expense, 'id' | 'createdAt'>, editingId?: string | null) => {
+    if (editingId) {
+      setExpenses((prev) => prev.map((e) => (e.id === editingId ? { ...e, ...draft, id: e.id, createdAt: e.createdAt } : e)));
+    } else {
+      setExpenses((prev) => [{ ...draft, id: newId(), createdAt: Date.now() }, ...prev]);
+    }
+  }, []);
 
   const showTabBar = TAB_ROUTES.has(route.name);
   const showBack = BACK_ROUTES.has(route.name);
-  const showTitle = route.name !== 'home';
+  const showTitle = !OWN_HEADER.has(route.name);
 
   const activeTab: TabKey | null =
     route.name === 'home'
       ? 'home'
-      : route.name === 'expenses'
-      ? 'expenses'
+      : route.name === 'personal'
+      ? 'personal'
       : route.name === 'groups' || route.name === 'group'
       ? 'groups'
+      : route.name === 'analysis'
+      ? 'analysis'
       : route.name === 'account'
       ? 'account'
       : null;
@@ -121,13 +131,10 @@ export default function App() {
     switch (route.name) {
       case 'group':
         return navigate({ name: 'groups' });
-      case 'scan':
-        return navigate({ name: 'home' });
       case 'add':
         return navigate(route.returnTo ?? { name: 'home' });
-      case 'reports':
       case 'mileage':
-        return navigate({ name: 'account' });
+        return navigate({ name: 'analysis' });
       default:
         return navigate({ name: 'home' });
     }
@@ -137,55 +144,33 @@ export default function App() {
     switch (route.name) {
       case 'home':
         return (
-          <ActivityScreen
+          <HomeScreen
             userName={user?.name ?? null}
             expenses={expenses}
             groups={groups}
             settlements={settlements}
+            cards={cards}
+            budgets={budgets}
             onScan={() => navigate({ name: 'scan' })}
             onAddExpense={() => navigate({ name: 'add', returnTo: { name: 'home' } })}
-            onOpenExpenses={() => navigate({ name: 'expenses' })}
+            onOpenPersonal={() => navigate({ name: 'personal' })}
             onOpenGroups={() => navigate({ name: 'groups' })}
+            onOpenAnalysis={() => navigate({ name: 'analysis' })}
+            onOpenOptimize={() => navigate({ name: 'optimize' })}
+            onOpenCards={() => navigate({ name: 'cards' })}
             onOpenGroup={(groupId) => navigate({ name: 'group', groupId })}
-            onOpenReports={() => navigate({ name: 'reports' })}
           />
         );
-      case 'expenses':
+      case 'personal':
         return (
-          <ExpensesScreen
+          <PersonalScreen
             expenses={expenses}
-            groups={groups}
             onScan={() => navigate({ name: 'scan' })}
-            onAddExpense={() => navigate({ name: 'add', returnTo: { name: 'expenses' } })}
-            onEditExpense={(e) => navigate({ name: 'add', editing: e, returnTo: { name: 'expenses' } })}
-            onOpenReports={() => navigate({ name: 'reports' })}
+            onAddExpense={() => navigate({ name: 'add', returnTo: { name: 'personal' } })}
+            onEditExpense={(e) => navigate({ name: 'add', editing: e, returnTo: { name: 'personal' } })}
+            onOpenAnalysis={() => navigate({ name: 'analysis' })}
           />
         );
-      case 'scan':
-        return (
-          <ScanScreen
-            onParsed={(prefill) => navigate({ name: 'add', prefill, returnTo: { name: 'home' } })}
-            onManual={() => navigate({ name: 'add', returnTo: { name: 'home' } })}
-            onCancel={() => navigate({ name: 'home' })}
-          />
-        );
-      case 'add': {
-        const editing = route.editing ?? null;
-        const returnTo = route.returnTo ?? { name: 'home' as const };
-        return (
-          <AddExpenseScreen
-            prefill={route.prefill ?? null}
-            editing={editing}
-            groups={groups}
-            presetGroupId={route.presetGroupId ?? null}
-            onSave={(draft) => {
-              saveExpense(draft, editing?.id ?? null);
-              navigate(returnTo);
-            }}
-            onCancel={() => navigate(returnTo)}
-          />
-        );
-      }
       case 'groups':
         return (
           <GroupsScreen
@@ -215,17 +200,70 @@ export default function App() {
           />
         );
       }
-      case 'reports':
+      case 'analysis':
         return (
-          <ReportsScreen
+          <AnalysisScreen
             expenses={expenses}
             budgets={budgets}
             mileage={mileage}
+            cards={cards}
             onAddBudget={(b) => setBudgets((prev) => [...prev, { ...b, id: newId() }])}
             onDeleteBudget={(id) => setBudgets((prev) => prev.filter((x) => x.id !== id))}
             onOpenMileage={() => navigate({ name: 'mileage' })}
+            onOpenOptimize={() => navigate({ name: 'optimize' })}
           />
         );
+      case 'optimize':
+        return (
+          <OptimizeScreen
+            expenses={expenses}
+            budgets={budgets}
+            cards={cards}
+            onOpenCards={() => navigate({ name: 'cards' })}
+            onOpenAnalysis={() => navigate({ name: 'analysis' })}
+          />
+        );
+      case 'cards':
+        return (
+          <CardsScreen
+            cards={cards}
+            payments={cardPayments}
+            onAddCard={(c) => setCards((prev) => [{ ...c, id: newId(), createdAt: Date.now() }, ...prev])}
+            onDeleteCard={(id) => {
+              setCards((prev) => prev.filter((c) => c.id !== id));
+              setCardPayments((prev) => prev.filter((p) => p.cardId !== id));
+            }}
+            onRecordPayment={(p) => {
+              setCardPayments((prev) => [{ ...p, id: newId(), createdAt: Date.now() }, ...prev]);
+              setCards((prev) => prev.map((c) => (c.id === p.cardId ? { ...c, outstandingCents: Math.max(0, c.outstandingCents - p.amountCents) } : c)));
+            }}
+          />
+        );
+      case 'scan':
+        return (
+          <ScanScreen
+            onParsed={(prefill) => navigate({ name: 'add', prefill, returnTo: { name: 'home' } })}
+            onManual={() => navigate({ name: 'add', returnTo: { name: 'home' } })}
+            onCancel={() => navigate({ name: 'home' })}
+          />
+        );
+      case 'add': {
+        const editing = route.editing ?? null;
+        const returnTo = route.returnTo ?? { name: 'home' as const };
+        return (
+          <AddExpenseScreen
+            prefill={route.prefill ?? null}
+            editing={editing}
+            groups={groups}
+            presetGroupId={route.presetGroupId ?? null}
+            onSave={(draft) => {
+              saveExpense(draft, editing?.id ?? null);
+              navigate(returnTo);
+            }}
+            onCancel={() => navigate(returnTo)}
+          />
+        );
+      }
       case 'mileage':
         return (
           <MileageScreen
@@ -240,7 +278,7 @@ export default function App() {
             user={user}
             expenseCount={expenses.length}
             groupCount={groups.length}
-            onOpenReports={() => navigate({ name: 'reports' })}
+            onOpenReports={() => navigate({ name: 'analysis' })}
             onOpenMileage={() => navigate({ name: 'mileage' })}
             onSignOut={() => {
               saveUser(null);
@@ -252,7 +290,7 @@ export default function App() {
       default:
         return null;
     }
-  }, [route, expenses, groups, settlements, mileage, budgets, user, navigate, saveExpense]);
+  }, [route, expenses, groups, settlements, mileage, budgets, cards, cardPayments, user, navigate, saveExpense]);
 
   const headerTitle =
     route.name === 'group'
@@ -261,18 +299,13 @@ export default function App() {
       ? route.editing
         ? 'Edit expense'
         : 'Add expense'
-      : TITLES[route.name];
+      : TITLES[route.name] ?? '';
 
   if (loaded && !user) {
     return (
       <View style={styles.page}>
         <View style={styles.phone}>
-          <LoginScreen
-            onSignIn={(u) => {
-              saveUser(u);
-              setUser(u);
-            }}
-          />
+          <LoginScreen onSignIn={(u) => { saveUser(u); setUser(u); }} />
         </View>
         <Text style={styles.caption}>Web preview · camera &amp; cloud OCR are stubbed here</Text>
       </View>
@@ -282,7 +315,7 @@ export default function App() {
   return (
     <View style={styles.page}>
       <View style={styles.phone}>
-        {showTitle ? (
+        {showTitle || showBack ? (
           <View style={styles.header}>
             {showBack ? (
               <Pressable onPress={goBack} style={styles.back}>
@@ -291,7 +324,7 @@ export default function App() {
             ) : (
               <View style={styles.back} />
             )}
-            <Text style={styles.headerTitle}>{headerTitle}</Text>
+            <Text style={styles.headerTitle}>{showTitle ? headerTitle : ''}</Text>
             <View style={styles.back} />
           </View>
         ) : null}

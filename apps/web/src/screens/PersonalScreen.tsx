@@ -10,22 +10,18 @@ import {
   EmptyState,
   Icon,
   ListRow,
-  Pill,
   SectionLabel,
   SegmentBar,
 } from '../components/ui';
-import { categoryColor, expenseToSpendTxn, myShareCents, type Expense, type Group } from '../store';
+import { categoryColor, expenseToSpendTxn, myShareCents, type Expense } from '../store';
 
 interface Props {
   expenses: Expense[];
-  groups: Group[];
   onScan: () => void;
   onAddExpense: () => void;
   onEditExpense: (e: Expense) => void;
-  onOpenReports: () => void;
+  onOpenAnalysis: () => void;
 }
-
-type FilterKind = 'all' | 'personal' | 'shared';
 
 function formatDateLabel(dateISO: string): string {
   const d = new Date(`${dateISO}T00:00:00`);
@@ -33,43 +29,36 @@ function formatDateLabel(dateISO: string): string {
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-export default function ExpensesScreen({ expenses, groups, onScan, onAddExpense, onEditExpense, onOpenReports }: Props) {
-  const [filter, setFilter] = useState<FilterKind>('all');
+export default function PersonalScreen({ expenses, onScan, onAddExpense, onEditExpense, onOpenAnalysis }: Props) {
   const [query, setQuery] = useState('');
 
-  const groupName = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const g of groups) map.set(g.id, g.name);
-    return (id: string | null): string => (id == null ? 'Personal' : map.get(id) ?? 'Group');
-  }, [groups]);
+  const personal = useMemo(() => expenses.filter((e) => e.groupId == null), [expenses]);
 
   const nowKey = useMemo(() => monthKeyOf(new Date().toISOString().slice(0, 10)), []);
 
-  const allTxns = useMemo(() => expenses.map(expenseToSpendTxn), [expenses]);
+  const personalTxns = useMemo(() => personal.map(expenseToSpendTxn), [personal]);
 
   const thisMonthTotal = useMemo(
     () =>
-      expenses
+      personal
         .filter((e) => monthKeyOf(e.dateISO) === nowKey)
         .reduce((sum, e) => sum + myShareCents(e), 0),
-    [expenses, nowKey],
+    [personal, nowKey],
   );
 
-  const momComparison = useMemo(() => monthOverMonth(allTxns, nowKey), [allTxns, nowKey]);
+  const momComparison = useMemo(() => monthOverMonth(personalTxns, nowKey), [personalTxns, nowKey]);
 
   const filtered = useMemo(() => {
-    let list = expenses;
-    if (filter === 'personal') list = list.filter((e) => e.groupId == null);
-    else if (filter === 'shared') list = list.filter((e) => e.groupId != null);
+    let list = personal;
     const q = query.trim().toLowerCase();
     if (q) list = list.filter((e) => e.description.toLowerCase().includes(q));
     return [...list].sort((a, b) => b.createdAt - a.createdAt);
-  }, [expenses, filter, query]);
+  }, [personal, query]);
 
   const categoryTotals = useMemo(() => {
-    const txns = filtered.map(expenseToSpendTxn);
+    const txns = personal.map(expenseToSpendTxn);
     return spendByCategory(txns).filter((c) => c.total > 0);
-  }, [filtered]);
+  }, [personal]);
 
   const categoryGrandTotal = useMemo(
     () => categoryTotals.reduce((s, c) => s + c.total, 0),
@@ -82,7 +71,7 @@ export default function ExpensesScreen({ expenses, groups, onScan, onAddExpense,
     <ScrollView style={styles.container} contentContainerStyle={styles.scroll}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.eyebrow}>This month</Text>
+        <Text style={styles.eyebrow}>Personal · This month</Text>
         <Text style={styles.total}>{formatINR(thisMonthTotal)}</Text>
         {momComparison.deltaPct != null && (
           <View
@@ -108,26 +97,15 @@ export default function ExpensesScreen({ expenses, groups, onScan, onAddExpense,
         )}
       </View>
 
-      {/* Filters */}
-      <View style={styles.filterRow}>
-        <Pill label="All" active={filter === 'all'} onPress={() => setFilter('all')} />
-        <Pill label="Personal" active={filter === 'personal'} onPress={() => setFilter('personal')} />
-        <Pill label="Shared" active={filter === 'shared'} onPress={() => setFilter('shared')} />
-      </View>
-      <View style={styles.searchBox}>
-        <Icon name="search" color={COLORS.subtext} size={17} />
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search expenses"
-          placeholderTextColor={COLORS.muted}
-          style={styles.searchInput}
-        />
+      {/* Actions */}
+      <View style={styles.actions}>
+        <Button label="Scan receipt" onPress={onScan} icon="scan" style={{ flex: 1 }} />
+        <Button label="Add expense" onPress={onAddExpense} variant="secondary" icon="plus" style={{ flex: 1 }} />
       </View>
 
       {/* Category breakdown */}
       {categoryTotals.length > 0 && (
-        <Card style={{ marginTop: 16 }}>
+        <Card style={{ marginTop: 18 }}>
           <SectionLabel>Category breakdown</SectionLabel>
           <SegmentBar
             segments={categoryTotals.map((c) => ({ value: c.total, color: categoryColor(c.category) }))}
@@ -148,17 +126,26 @@ export default function ExpensesScreen({ expenses, groups, onScan, onAddExpense,
         </Card>
       )}
 
+      {/* Search */}
+      <View style={styles.searchBox}>
+        <Icon name="search" color={COLORS.subtext} size={17} />
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search personal expenses"
+          placeholderTextColor={COLORS.muted}
+          style={styles.searchInput}
+        />
+      </View>
+
       {/* Expense list */}
       <View style={styles.section}>
-        <View style={styles.sectionHead}>
-          <SectionLabel>All expenses</SectionLabel>
-          <Text style={styles.seeAll} onPress={onOpenReports}>Reports</Text>
-        </View>
+        <SectionLabel>Personal expenses</SectionLabel>
         {filtered.length === 0 ? (
           <Card>
             <EmptyState
               emoji="🧾"
-              title="No expenses found"
+              title="No personal expenses found"
               subtitle={query ? 'Try a different search.' : 'Scan a receipt or add an expense to get started.'}
               actionLabel="Add expense"
               onAction={onAddExpense}
@@ -172,9 +159,8 @@ export default function ExpensesScreen({ expenses, groups, onScan, onAddExpense,
                 <ListRow
                   left={<CategoryAvatar category={e.category} />}
                   title={e.description}
-                  subtitle={`${groupName(e.groupId)} · ${formatDateLabel(e.dateISO)}`}
+                  subtitle={`${formatDateLabel(e.dateISO)} · ${e.source === 'scan' ? 'Scanned' : 'Manual'}`}
                   rightTop={<Text style={styles.rowAmt}>{formatINR(myShareCents(e))}</Text>}
-                  rightBottom={e.groupId == null ? 'personal' : 'your share'}
                   onPress={() => onEditExpense(e)}
                 />
               </View>
@@ -183,12 +169,7 @@ export default function ExpensesScreen({ expenses, groups, onScan, onAddExpense,
         )}
       </View>
 
-      {/* Actions */}
-      <View style={styles.actions}>
-        <Button label="Scan receipt" onPress={onScan} icon="scan" style={{ flex: 1 }} />
-        <Button label="Add expense" onPress={onAddExpense} variant="secondary" icon="plus" style={{ flex: 1 }} />
-      </View>
-      <Text style={styles.reportsLink} onPress={onOpenReports}>View spending reports →</Text>
+      <Text style={styles.analysisLink} onPress={onOpenAnalysis}>View full analysis →</Text>
 
       <View style={{ height: 12 }} />
     </ScrollView>
@@ -220,7 +201,7 @@ const styles = StyleSheet.create({
   },
   deltaText: { fontWeight: '800', fontSize: 12 },
 
-  filterRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  actions: { flexDirection: 'row', gap: 10 },
 
   searchBox: {
     flexDirection: 'row',
@@ -232,6 +213,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
+    marginTop: 18,
   },
   searchInput: {
     flex: 1,
@@ -248,13 +230,10 @@ const styles = StyleSheet.create({
   catAmt: { color: COLORS.ink, fontWeight: '800', fontSize: 13.5, minWidth: 68, textAlign: 'right' },
 
   section: { marginTop: 22 },
-  sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
-  seeAll: { color: COLORS.primary, fontWeight: '800', fontSize: 13, paddingVertical: 2, paddingLeft: 12 },
   rowDivider: { height: 1, backgroundColor: COLORS.divider, marginLeft: 52 },
   rowAmt: { color: COLORS.ink, fontWeight: '800', fontSize: 15 },
 
-  actions: { flexDirection: 'row', gap: 10, marginTop: 22 },
-  reportsLink: {
+  analysisLink: {
     textAlign: 'center',
     color: COLORS.primary,
     fontWeight: '700',

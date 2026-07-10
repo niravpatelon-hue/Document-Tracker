@@ -3,12 +3,12 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { formatINR, formatINRShort, toCents } from '@domain/money';
 import {
   monthKeyOf,
+  monthOverMonth,
   spendByCategory,
   spendByMonth,
   type SpendTxn,
 } from '@domain/analytics/spend';
 import { evaluateBudget } from '@domain/analytics/budget';
-import { mileageSummary } from '@domain/business/mileage';
 import { transactionsToCsv } from '@domain/export/csv';
 import { COLORS } from '../theme';
 import {
@@ -16,6 +16,7 @@ import {
   Card,
   Field,
   Icon,
+  ListRow,
   MiniBars,
   Pill,
   SectionLabel,
@@ -27,6 +28,7 @@ import {
   expenseToSpendTxn,
   myShareCents,
   type Budget,
+  type CreditCard,
   type Expense,
   type MileageTrip,
 } from '../store';
@@ -35,6 +37,7 @@ interface Props {
   expenses: Expense[];
   budgets: Budget[];
   mileage: MileageTrip[];
+  cards: CreditCard[];
   onAddBudget: (b: {
     category: string;
     period: 'monthly' | 'yearly';
@@ -43,6 +46,7 @@ interface Props {
   }) => void;
   onDeleteBudget: (id: string) => void;
   onOpenMileage: () => void;
+  onOpenOptimize: () => void;
 }
 
 const TODAY = new Date().toISOString().slice(0, 10);
@@ -66,13 +70,15 @@ function downloadCsv(csv: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-export default function ReportsScreen({
+export default function AnalysisScreen({
   expenses,
   budgets,
   mileage,
+  cards,
   onAddBudget,
   onDeleteBudget,
   onOpenMileage,
+  onOpenOptimize,
 }: Props) {
   const [addingBudget, setAddingBudget] = useState(false);
   const [budgetCategory, setBudgetCategory] = useState(EXPENSE_CATEGORIES[0]!.key);
@@ -88,6 +94,8 @@ export default function ReportsScreen({
     [myTxns, nowKey],
   );
 
+  const mom = useMemo(() => monthOverMonth(myTxns, nowKey), [myTxns, nowKey]);
+
   const monthTotals = useMemo(() => spendByMonth(myTxns), [myTxns]);
   const last6 = useMemo(() => monthTotals.slice(-6), [monthTotals]);
   const monthBarsData = last6.map((m) => m.total);
@@ -99,14 +107,30 @@ export default function ReportsScreen({
     [categoryTotals],
   );
 
-  const mileageStats = useMemo(() => mileageSummary(mileage), [mileage]);
+  const topMerchants = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const e of expenses) {
+      const name = (e.description || 'Unknown').trim() || 'Unknown';
+      map.set(name, (map.get(name) ?? 0) + myShareCents(e));
+    }
+    return Array.from(map.entries())
+      .map(([vendor, total]) => ({ vendor, total }))
+      .filter((m) => m.total > 0)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5);
+  }, [expenses]);
 
   const budgetStatuses = useMemo(
     () =>
       budgets.map((b) => ({
         budget: b,
         status: evaluateBudget(
-          { category: b.category, period: b.period, limitCents: b.limitCents, alertThresholdPct: b.alertThresholdPct },
+          {
+            category: b.category,
+            period: b.period,
+            limitCents: b.limitCents,
+            alertThresholdPct: b.alertThresholdPct,
+          },
           myTxns,
           TODAY,
         ),
@@ -145,19 +169,51 @@ export default function ReportsScreen({
     downloadCsv(csv, `expenses-${TODAY}.csv`);
   }
 
+  const momUp = mom.delta > 0;
+  const momFlat = mom.delta === 0;
+  const momColor = momFlat ? COLORS.subtext : momUp ? COLORS.owe : COLORS.owed;
+  const momLabel = momFlat
+    ? 'Same as last month'
+    : `${momUp ? '+' : '−'}${formatINRShort(Math.abs(mom.delta))}${
+        mom.deltaPct != null ? ` (${momUp ? '+' : '−'}${Math.abs(Math.round(mom.deltaPct))}%)` : ''
+      } vs last month`;
+
+  const optimizeTeaser =
+    cards.length > 0
+      ? 'Spot recurring bills, category overspend, and card dues to trim.'
+      : 'Spot recurring bills and category overspend you can trim this month.';
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scroll}>
-      <Text style={styles.screenTitle}>Reports</Text>
+      <Text style={styles.screenTitle}>Financial analysis</Text>
 
       {/* This month + trend */}
       <Card style={{ marginTop: 14 }}>
         <SectionLabel>This month</SectionLabel>
         <Text style={styles.bigTotal}>{formatINR(thisMonthTotal)}</Text>
+        <View style={[styles.momChip, { backgroundColor: momFlat ? COLORS.chip : momUp ? COLORS.oweSoft : COLORS.owedSoft }]}>
+          {!momFlat && (
+            <Icon name={momUp ? 'arrowUp' : 'arrowDown'} color={momColor} size={13} strokeWidth={2.6} />
+          )}
+          <Text style={[styles.momText, { color: momColor }]}>{momLabel}</Text>
+        </View>
         {monthBarsData.length > 0 && (
           <View style={{ marginTop: 14 }}>
             <MiniBars data={monthBarsData} labels={monthBarsLabels} height={54} />
           </View>
         )}
+      </Card>
+
+      {/* Optimize */}
+      <Card style={styles.optimizeCard} onPress={onOpenOptimize}>
+        <View style={styles.optimizeIcon}>
+          <Icon name="sparkles" color={COLORS.primary} size={20} />
+        </View>
+        <View style={{ flex: 1, marginLeft: 12 }}>
+          <Text style={styles.optimizeTitle}>Optimize your spending</Text>
+          <Text style={styles.optimizeSub}>{optimizeTeaser}</Text>
+        </View>
+        <Icon name="chevron" color={COLORS.primaryDark} size={18} />
       </Card>
 
       {/* Category breakdown */}
@@ -188,6 +244,25 @@ export default function ReportsScreen({
           </>
         )}
       </Card>
+
+      {/* Top merchants */}
+      {topMerchants.length > 0 && (
+        <View style={styles.section}>
+          <SectionLabel>Top merchants</SectionLabel>
+          <Card style={{ paddingVertical: 4 }}>
+            {topMerchants.map((m, i) => (
+              <View key={m.vendor}>
+                {i > 0 && <View style={styles.rowDivider} />}
+                <ListRow
+                  left={<View style={styles.rankBadge}><Text style={styles.rankText}>{i + 1}</Text></View>}
+                  title={m.vendor}
+                  rightTop={<Text style={styles.merchantAmt}>{formatINRShort(m.total)}</Text>}
+                />
+              </View>
+            ))}
+          </Card>
+        </View>
+      )}
 
       {/* Budgets */}
       <View style={styles.sectionHead}>
@@ -273,27 +348,10 @@ export default function ReportsScreen({
         </Card>
       )}
 
-      {/* Mileage summary */}
-      <SectionLabel>Mileage</SectionLabel>
-      <Card onPress={onOpenMileage}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <View style={styles.mileageIconWrap}>
-            <Icon name="mapPin" color={COLORS.primary} size={20} />
-          </View>
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={styles.mileageTitle}>{mileageStats.totalKm.toFixed(1)} km logged</Text>
-            <Text style={styles.mileageSub}>
-              {mileageStats.tripCount} trip{mileageStats.tripCount === 1 ? '' : 's'} · reimbursement{' '}
-              {formatINR(mileageStats.totalCents)}
-            </Text>
-          </View>
-          <Icon name="chevron" color={COLORS.muted} size={18} />
-        </View>
-      </Card>
-
-      {/* Export */}
-      <View style={{ marginTop: 22 }}>
-        <Button label="Export CSV" onPress={exportCsv} icon="download" variant="secondary" />
+      {/* Actions */}
+      <View style={styles.actionsRow}>
+        <Button label="Export CSV" onPress={exportCsv} icon="download" variant="secondary" style={{ flex: 1 }} />
+        <Button label="Mileage log" onPress={onOpenMileage} icon="mapPin" variant="secondary" style={{ flex: 1 }} />
       </View>
 
       <View style={{ height: 12 }} />
@@ -307,6 +365,49 @@ const styles = StyleSheet.create({
   screenTitle: { color: COLORS.ink, fontWeight: '900', fontSize: 22 },
   bigTotal: { color: COLORS.ink, fontWeight: '900', fontSize: 28, marginTop: 6 },
   empty: { color: COLORS.subtext, fontSize: 13.5, marginTop: 8 },
+
+  momChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  momText: { fontWeight: '800', fontSize: 12 },
+
+  optimizeCard: {
+    marginTop: 14,
+    backgroundColor: COLORS.primarySoft,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  optimizeIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  optimizeTitle: { color: COLORS.primaryDark, fontWeight: '900', fontSize: 15 },
+  optimizeSub: { color: COLORS.ink, fontSize: 12.5, marginTop: 3, lineHeight: 17 },
+
+  section: { marginTop: 22 },
+  rowDivider: { height: 1, backgroundColor: COLORS.divider, marginLeft: 54 },
+
+  rankBadge: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: COLORS.chip,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rankText: { color: COLORS.subtext, fontWeight: '900', fontSize: 13 },
+  merchantAmt: { color: COLORS.ink, fontWeight: '800', fontSize: 14.5 },
 
   catRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 9 },
   catRowBorder: { borderTopWidth: 1, borderTopColor: COLORS.divider },
@@ -344,14 +445,5 @@ const styles = StyleSheet.create({
   periodRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
   budgetActions: { flexDirection: 'row', gap: 10, marginTop: 16 },
 
-  mileageIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mileageTitle: { color: COLORS.ink, fontWeight: '800', fontSize: 14.5 },
-  mileageSub: { color: COLORS.subtext, fontSize: 12, marginTop: 2 },
+  actionsRow: { flexDirection: 'row', gap: 10, marginTop: 22 },
 });
