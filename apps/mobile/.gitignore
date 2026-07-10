@@ -1,0 +1,28 @@
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+.pnp.*
+
+# Metro / RN
+.metro-health-check*
+*.jsbundle
+
+# TypeScript / Jest
+coverage/
+*.tsbuildinfo
+
+# Android build output
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+*.keystore
+!debug.keystore
+
+# Env / secrets
+.env
+.env.*
+
+# OS
+.DS_Store

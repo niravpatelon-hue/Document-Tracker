@@ -1,11 +1,13 @@
 # Document Tracker — Architecture & Technical Design
 
-Status: **Design phase (Phase 0)** — no application code yet. **Scope: Android
-only** — iOS has been explicitly dropped from this build. React Native is still
-used by choice (see §2) to keep the option of adding iOS later open, not because
-iOS ships as part of this project. This document turns the product spec into
-concrete technical decisions so implementation can begin without re-litigating
-architecture mid-build.
+Status: **Phase 1 in progress** — the capture engine, OCR pipeline, single-document
+data model, and minimal auto-populated ledger are implemented under
+[`apps/mobile`](../apps/mobile) (the pure domain + OCR orchestration are covered by
+89 passing unit tests). **Scope: Android only** — iOS has been explicitly dropped
+from this build. React Native is still used by choice (see §2) to keep the option of
+adding iOS later open, not because iOS ships as part of this project. This document
+turns the product spec into concrete technical decisions so implementation can
+proceed without re-litigating architecture mid-build.
 
 ## 1. Guiding principles → concrete consequences
 
@@ -252,8 +254,8 @@ result is pushed to all members over Realtime.
 
 | Phase | Scope | Notes |
 |---|---|---|
-| 0 (this doc) | Architecture + data model, no code | |
-| 1 | Capture engine (Android) + OCR pipeline + minimal auto-populated ledger | ML Kit Doc Scanner, Veryfi integration, on-device fallback, Documents list/search/dedup |
+| 0 ✅ | Architecture + data model | Complete — this doc + `DATA_MODEL.md` |
+| 1 🚧 | Capture engine (Android) + OCR pipeline + minimal auto-populated ledger | In progress — domain core (split/settle/dedup/status/OCR-parse) implemented + tested; WatermelonDB models, ML Kit native modules, OCR orchestration, capture→review→ledger UI, OCR proxy Edge Function. Full-text search + the native pHash downscale step are the remaining Phase-1 items |
 | 2 | Warranty/Device/Loyalty tracking | Generic `TrackedItem`, lookup tables, status dashboard, reminders, tiered verification incl. Dell API + Apple deep link |
 | 3 | Full spend analysis | Dashboards, trend/YoY/MoM, budgets + alerts, CSV/PDF export bundling originals |
 | 4 | Expense splitting | Groups, all split types, Realtime balances, settle-up deep links (Venmo/PayPal/UPI) |

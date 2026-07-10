@@ -1,0 +1,19 @@
+{
+  "extends": "@react-native/typescript-config/tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false,
+    "baseUrl": "./src",
+    "paths": {
+      "@domain/*": ["domain/*"],
+      "@db/*": ["db/*"],
+      "@ocr/*": ["ocr/*"],
+      "@capture/*": ["capture/*"]
+    }
+  },
+  "include": ["src", "index.js", "jest.config.js"],
+  "exclude": ["node_modules", "android", "**/*.test.ts"]
+}
