@@ -7,6 +7,7 @@
  */
 import { buildFuzzyKey, isLikelyDuplicatePurchase } from '@domain/dedup/fuzzy';
 import type { DocumentCategory } from '@domain/ocr/fieldparser';
+import type { SplitType } from '@domain/splitting';
 
 export type OcrMode = 'on_device' | 'cloud' | 'manual';
 
@@ -67,15 +68,27 @@ export interface WebGroupMember {
   venmo?: string;
 }
 
+export interface ExpensePayer {
+  userId: string;
+  cents: number;
+}
+
 export interface WebExpense {
   id: string;
   groupId: string;
   description: string;
-  payerId: string;
+  category: string;
+  dateISO: string;
+  notes?: string;
+  /** Who fronted the money (one or many payers). */
+  payers: ExpensePayer[];
+  /** Which members share this expense. */
+  involvedIds: string[];
   totalCents: number;
-  splitType: 'equal' | 'percentage' | 'exact' | 'share';
+  splitType: SplitType;
   allocations: { userId: string; cents: number }[];
   sourceDocumentId?: string | null;
+  createdAt: number;
 }
 
 export interface WebGroup {
@@ -91,6 +104,25 @@ export interface WebSettlement {
   fromUser: string;
   toUser: string;
   amount: number;
+  note?: string;
+  createdAt: number;
+}
+
+/** Expense categories, Splitwise-style, with a simple emoji per category. */
+export const EXPENSE_CATEGORIES: { key: string; icon: string }[] = [
+  { key: 'General', icon: '🧾' },
+  { key: 'Food & drink', icon: '🍽️' },
+  { key: 'Groceries', icon: '🛒' },
+  { key: 'Travel', icon: '✈️' },
+  { key: 'Lodging', icon: '🏠' },
+  { key: 'Transport', icon: '🚗' },
+  { key: 'Entertainment', icon: '🎉' },
+  { key: 'Utilities', icon: '💡' },
+  { key: 'Shopping', icon: '🛍️' },
+];
+
+export function categoryIcon(key: string): string {
+  return EXPENSE_CATEGORIES.find((c) => c.key === key)?.icon ?? '🧾';
 }
 
 export interface PersistedState {

@@ -7,7 +7,7 @@
 import type { Cents } from './money';
 import { assertIntegerCents, distribute } from './money';
 
-export type SplitType = 'equal' | 'percentage' | 'exact' | 'share';
+export type SplitType = 'equal' | 'percentage' | 'exact' | 'share' | 'adjustment';
 
 export interface SplitParticipantInput {
   userId: string;
@@ -17,6 +17,8 @@ export interface SplitParticipantInput {
    *  - percentage: percent of total (0..100); the set must sum to 100
    *  - exact:      exact cents this participant owes; the set must sum to total
    *  - share:      non-negative share weight (e.g. 2 rooms vs 1); need one > 0
+   *  - adjustment: extra cents (may be negative) for this participant on top of
+   *                an equal split of the remainder (Splitwise "by adjustment")
    */
   value?: number;
 }
@@ -106,6 +108,26 @@ export function computeSplit(
         return v;
       });
       return zip(participants, distribute(totalCents, shares));
+    }
+
+    case 'adjustment': {
+      // Each participant owes an equal share of (total - sum of adjustments),
+      // plus their own adjustment (which may be negative).
+      const adjustments = participants.map((p) => {
+        const v = p.value ?? 0;
+        assertIntegerCents(v, 'adjustment');
+        return v;
+      });
+      const sumAdj = adjustments.reduce((a, b) => a + b, 0);
+      const remainder = totalCents - sumAdj;
+      if (remainder < 0) {
+        throw new Error(`adjustments (${sumAdj}) exceed the total (${totalCents})`);
+      }
+      const base = distribute(remainder, participants.map(() => 1));
+      return zip(
+        participants,
+        base.map((b, i) => b + adjustments[i]!),
+      );
     }
 
     default: {

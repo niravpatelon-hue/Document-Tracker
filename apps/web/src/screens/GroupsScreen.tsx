@@ -19,7 +19,7 @@ function youNet(group: WebGroup, expenses: WebExpense[], settlements: WebSettlem
   const ge = expenses.filter((e) => e.groupId === group.id);
   const gs = settlements.filter((s) => s.groupId === group.id);
   const balances = computeNetBalances(
-    ge.map((e) => ({ payerId: e.payerId, allocations: e.allocations })),
+    ge.map((e) => ({ payers: e.payers, allocations: e.allocations })),
     gs.map((s) => ({ fromUser: s.fromUser, toUser: s.toUser, amount: s.amount })),
   );
   return balances.find((b) => b.userId === 'u_you')?.net ?? 0;
@@ -54,8 +54,21 @@ export default function GroupsScreen({ groups, expenses, settlements, onOpenGrou
     setMembers([]);
   }
 
+  const overall = groups.reduce((sum, g) => sum + youNet(g, expenses, settlements), 0);
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scroll}>
+      <View style={[styles.overall, { borderColor: overall >= 0 ? COLORS.success : COLORS.danger }]}>
+        <Text style={styles.overallLabel}>Overall, across all groups</Text>
+        <Text style={[styles.overallValue, { color: overall > 0 ? COLORS.success : overall < 0 ? COLORS.danger : COLORS.subtext }]}>
+          {overall === 0
+            ? "you're settled up"
+            : overall > 0
+            ? `you are owed $${formatAmount(overall)}`
+            : `you owe $${formatAmount(-overall)}`}
+        </Text>
+      </View>
+
       {creating ? (
         <View style={styles.panel}>
           <Text style={styles.label}>Group name</Text>
@@ -137,6 +150,9 @@ export default function GroupsScreen({ groups, expenses, settlements, onOpenGrou
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   scroll: { padding: 16, paddingBottom: 24 },
+  overall: { borderWidth: 2, borderRadius: 12, padding: 14, marginBottom: 12 },
+  overallLabel: { fontSize: 12, color: COLORS.subtext },
+  overallValue: { fontSize: 17, fontWeight: '800', marginTop: 3 },
   panel: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, padding: 12, marginBottom: 8 },
   label: { fontSize: 13, fontWeight: '600', color: COLORS.subtext, marginTop: 8, marginBottom: 6 },
   input: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 9, fontSize: 15, color: COLORS.text },

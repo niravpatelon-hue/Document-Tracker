@@ -11,9 +11,14 @@
  */
 import type { Cents } from '../money';
 
+export interface Payment {
+  userId: string;
+  cents: Cents;
+}
+
 export interface ExpenseForBalance {
-  /** Who fronted the money. */
-  payerId: string;
+  /** Who fronted the money, and how much each paid (supports multiple payers). */
+  payers: Payment[];
   /** What each participant owes for this expense (from computeSplit). */
   allocations: { userId: string; cents: Cents }[];
 }
@@ -38,9 +43,10 @@ export interface Transfer {
 
 /**
  * Net each member's position across all expenses and any settlements already
- * made. For each expense, the payer is credited the full total and every
- * participant (including the payer, if they share) is debited their allocation.
- * A recorded settlement moves `amount` from payer's debt to the recipient.
+ * made. For each expense, every payer is credited what they fronted and every
+ * participant is debited their allocation (this supports multiple payers on one
+ * expense, like Splitwise). A recorded settlement moves `amount` from the
+ * payer's debt to the recipient.
  */
 export function computeNetBalances(
   expenses: ExpenseForBalance[],
@@ -52,8 +58,9 @@ export function computeNetBalances(
   };
 
   for (const expense of expenses) {
-    const total = expense.allocations.reduce((a, b) => a + b.cents, 0);
-    bump(expense.payerId, total);
+    for (const payer of expense.payers) {
+      bump(payer.userId, payer.cents);
+    }
     for (const alloc of expense.allocations) {
       bump(alloc.userId, -alloc.cents);
     }

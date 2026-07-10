@@ -136,7 +136,10 @@ export function seedState(): PersistedState {
       id: 'e-cabin',
       groupId: 'g-trip',
       description: 'Cabin rental',
-      payerId: 'u_you',
+      category: 'Lodging',
+      dateISO: '2026-07-02',
+      payers: [{ userId: 'u_you', cents: 30000 }],
+      involvedIds: ['u_you', 'u_alex', 'u_sam'],
       totalCents: 30000,
       splitType: 'equal',
       allocations: [
@@ -144,6 +147,7 @@ export function seedState(): PersistedState {
         { userId: 'u_alex', cents: 10000 },
         { userId: 'u_sam', cents: 10000 },
       ],
+      createdAt: Date.now() - 86_400_000 * 2,
     },
   ];
 

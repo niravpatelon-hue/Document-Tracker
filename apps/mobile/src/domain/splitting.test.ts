@@ -54,6 +54,26 @@ describe('computeSplit — share', () => {
   });
 });
 
+describe('computeSplit — adjustment', () => {
+  it('gives each an equal share of the remainder plus their adjustment', () => {
+    // total 1000, adjustments a:+200 b:0 -> remainder 800 split equally (400/400)
+    const result = computeSplit(1000, 'adjustment', [p('a', 200), p('b', 0)]);
+    expect(result.map((r) => r.cents)).toEqual([600, 400]);
+    expect(sum(result)).toBe(1000);
+  });
+
+  it('supports negative adjustments and stays exact', () => {
+    const result = computeSplit(900, 'adjustment', [p('a', -300), p('b', 0), p('c', 0)]);
+    expect(sum(result)).toBe(900);
+    // remainder 1200 split 3 ways = 400 each; a gets -300 -> 100
+    expect(result[0]!.cents).toBe(100);
+  });
+
+  it('rejects adjustments exceeding the total', () => {
+    expect(() => computeSplit(500, 'adjustment', [p('a', 400), p('b', 400)])).toThrow();
+  });
+});
+
 describe('computeSplit — guards', () => {
   it('rejects duplicate participants', () => {
     expect(() => computeSplit(100, 'equal', [p('a'), p('a')])).toThrow();

@@ -164,9 +164,15 @@ export default function App() {
             expenses={expenses.filter((e) => e.groupId === group.id)}
             settlements={settlements.filter((s) => s.groupId === group.id)}
             receiptDocs={documents.filter((d) => d.category === 'bills_receipts' && d.totalCents != null)}
-            onAddExpense={(e) => setExpenses((prev) => [{ ...e, id: newId() }, ...prev])}
+            onAddExpense={(e) =>
+              setExpenses((prev) => [{ ...e, id: newId(), createdAt: Date.now() }, ...prev])
+            }
+            onUpdateExpense={(id, patch) =>
+              setExpenses((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)))
+            }
+            onDeleteExpense={(id) => setExpenses((prev) => prev.filter((e) => e.id !== id))}
             onRecordSettlement={(s) =>
-              setSettlements((prev) => [{ ...s, id: newId() }, ...prev])
+              setSettlements((prev) => [{ ...s, id: newId(), createdAt: Date.now() }, ...prev])
             }
           />
         );

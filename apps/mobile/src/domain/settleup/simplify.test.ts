@@ -20,7 +20,7 @@ describe('computeNetBalances', () => {
   it('credits the payer and debits each participant', () => {
     const expenses: ExpenseForBalance[] = [
       {
-        payerId: 'a',
+        payers: [{ userId: 'a', cents: 900 }],
         allocations: [
           { userId: 'a', cents: 300 },
           { userId: 'b', cents: 300 },
@@ -37,9 +37,30 @@ describe('computeNetBalances', () => {
     expect(balances.reduce((s, b) => s + b.net, 0)).toBe(0);
   });
 
+  it('supports multiple payers on one expense', () => {
+    const expenses: ExpenseForBalance[] = [
+      {
+        // a and b each fronted 500; split equally 3 ways (~333 each).
+        payers: [
+          { userId: 'a', cents: 500 },
+          { userId: 'b', cents: 500 },
+        ],
+        allocations: [
+          { userId: 'a', cents: 334 },
+          { userId: 'b', cents: 333 },
+          { userId: 'c', cents: 333 },
+        ],
+      },
+    ];
+    const balances = computeNetBalances(expenses);
+    expect(balances.reduce((s, b) => s + b.net, 0)).toBe(0);
+    expect(balances.find((b) => b.userId === 'c')!.net).toBe(-333);
+    expect(balances.find((b) => b.userId === 'a')!.net).toBe(166); // paid 500, owes 334
+  });
+
   it('applies recorded settlements', () => {
     const expenses: ExpenseForBalance[] = [
-      { payerId: 'a', allocations: [{ userId: 'b', cents: 500 }] },
+      { payers: [{ userId: 'a', cents: 500 }], allocations: [{ userId: 'b', cents: 500 }] },
     ];
     // b owes a 500; b pays a 500 -> everyone settled.
     const balances = computeNetBalances(expenses, [{ fromUser: 'b', toUser: 'a', amount: 500 }]);
