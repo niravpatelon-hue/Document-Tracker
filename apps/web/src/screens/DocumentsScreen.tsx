@@ -8,6 +8,7 @@ import {
   findFirstDate,
   guessCategory,
 } from '@domain/ocr/fieldparser';
+import type { DocumentCategory } from '@domain/ocr/fieldparser';
 import { formatAmount } from '@domain/money';
 import { CATEGORY_LABEL, COLORS } from '../theme';
 import { Card, Icon, IconChip, SectionLabel, categoryVisual } from '../components/ui';
@@ -20,6 +21,8 @@ interface Props {
   documents: WebDocument[];
   groups: WebGroup[];
   autoOpenScan?: boolean;
+  /** When set (adding a Warranty/Loyalty via scan), force this category in review. */
+  intendedCategory?: DocumentCategory;
   onReview: (prefill: ReviewPrefill) => void;
   onOpenGroups: () => void;
   onSplitToGroup: (groupId: string, docId: string) => void;
@@ -30,8 +33,9 @@ function buildPrefill(
   text: string,
   imageDataUrl: string | null,
   ocrMode: ReviewPrefill['ocrMode'],
+  intendedCategory?: DocumentCategory,
 ): ReviewPrefill {
-  const category = text.trim() ? guessCategory(text) : 'other';
+  const category = intendedCategory ?? (text.trim() ? guessCategory(text) : 'bills_receipts');
   const receipt = extractReceiptFields(text);
   return {
     category,
@@ -69,6 +73,7 @@ export default function DocumentsScreen({
   documents,
   groups,
   autoOpenScan,
+  intendedCategory,
   onReview,
   onOpenGroups,
   onSplitToGroup,
@@ -107,7 +112,7 @@ export default function DocumentsScreen({
         setStatus(s);
         setPct(Math.round(p * 100));
       });
-      onReview(buildPrefill(text, imageDataUrl, 'on_device'));
+      onReview(buildPrefill(text, imageDataUrl, 'on_device', intendedCategory));
       reset();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -116,7 +121,7 @@ export default function DocumentsScreen({
   }
 
   function proceedWithText(source: string) {
-    onReview(buildPrefill(source, null, 'on_device'));
+    onReview(buildPrefill(source, null, 'on_device', intendedCategory));
     reset();
   }
 
@@ -144,6 +149,9 @@ export default function DocumentsScreen({
               </View>
             ) : (
               <>
+                {intendedCategory ? (
+                  <Text style={styles.addingHint}>Adding a {CATEGORY_LABEL[intendedCategory]}</Text>
+                ) : null}
                 <Text style={styles.label}>Upload a photo, PDF, or Word (.docx) document</Text>
                 <FileInput onPick={onPickFile} disabled={busy} />
 
@@ -268,6 +276,7 @@ const styles = StyleSheet.create({
   busy: { alignItems: 'center', paddingVertical: 18, gap: 8 },
   busyText: { color: COLORS.text, fontWeight: '600' },
   busyHint: { color: COLORS.subtext, fontSize: 12 },
+  addingHint: { fontSize: 13, fontWeight: '700', color: COLORS.primary, marginBottom: 8 },
   label: { fontSize: 13, fontWeight: '600', color: COLORS.subtext, marginBottom: 4 },
   or: { color: COLORS.subtext, fontSize: 12, textAlign: 'center', marginVertical: 12 },
   textarea: {

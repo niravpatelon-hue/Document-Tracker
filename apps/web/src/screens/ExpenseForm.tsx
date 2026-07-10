@@ -295,7 +295,7 @@ export default function ExpenseForm({ group, receiptDocs, initial, prefillReceip
 }
 
 const styles = StyleSheet.create({
-  wrap: { backgroundColor: COLORS.screenBg, borderRadius: 12, padding: 12, marginBottom: 12 },
+  wrap: { backgroundColor: '#fff', borderWidth: 1, borderColor: COLORS.border, borderRadius: 16, padding: 14, marginBottom: 12 },
   fromReceipt: { backgroundColor: '#eef6ff', borderRadius: 8, padding: 10, marginBottom: 4 },
   fromReceiptText: { color: '#1e40af', fontSize: 13, fontWeight: '600' },
   label: { fontSize: 13, fontWeight: '600', color: COLORS.subtext, marginTop: 10, marginBottom: 6 },

@@ -43,12 +43,30 @@ export interface ReviewPrefill {
 
 type Route =
   | { name: 'home' }
-  | { name: 'documents'; autoScan?: boolean }
+  | { name: 'documents'; autoScan?: boolean; intendedCategory?: DocumentCategory }
   | { name: 'review'; prefill: ReviewPrefill }
   | { name: 'analytics' }
   | { name: 'tracked' }
   | { name: 'groups' }
   | { name: 'group'; groupId: string; prefillDocId?: string };
+
+/** A blank prefill for adding an item by hand (no scan). */
+function blankPrefill(category: DocumentCategory): ReviewPrefill {
+  return {
+    category,
+    vendor: '',
+    totalCents: null,
+    taxCents: null,
+    dateISO: '',
+    imei: null,
+    serial: null,
+    productName: null,
+    retailer: null,
+    imageDataUrl: null,
+    rawText: '',
+    ocrMode: 'manual',
+  };
+}
 
 const TITLES: Record<string, string> = {
   documents: 'Documents',
@@ -142,6 +160,7 @@ export default function App() {
             documents={documents}
             groups={groups}
             autoOpenScan={route.autoScan}
+            intendedCategory={route.intendedCategory}
             onReview={(prefill) => navigate({ name: 'review', prefill })}
             onOpenGroups={() => navigate({ name: 'groups' })}
             onSplitToGroup={(groupId, docId) => navigate({ name: 'group', groupId, prefillDocId: docId })}
@@ -169,7 +188,13 @@ export default function App() {
           />
         );
       case 'tracked':
-        return <TrackedItemsScreen documents={documents} />;
+        return (
+          <TrackedItemsScreen
+            documents={documents}
+            onAddManual={(cat) => navigate({ name: 'review', prefill: blankPrefill(cat) })}
+            onAddScan={(cat) => navigate({ name: 'documents', autoScan: true, intendedCategory: cat })}
+          />
+        );
       case 'groups':
         return (
           <GroupsScreen
