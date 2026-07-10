@@ -74,4 +74,18 @@ describe('classifySpendCategory', () => {
     expect(classifySpendCategory('Some Random LLC')).toBe('Other');
     expect(classifySpendCategory('')).toBe('Other');
   });
+
+  it('recognizes common Indian merchants', () => {
+    expect(classifySpendCategory('BigBasket')).toBe('Groceries');
+    expect(classifySpendCategory('Blinkit')).toBe('Groceries');
+    expect(classifySpendCategory('Swiggy')).toBe('Dining');
+    expect(classifySpendCategory('Zomato')).toBe('Dining');
+    expect(classifySpendCategory('Indian Oil')).toBe('Fuel');
+    expect(classifySpendCategory('Uber')).toBe('Transport');
+    expect(classifySpendCategory('BESCOM Electricity')).toBe('Utilities');
+    expect(classifySpendCategory('Airtel')).toBe('Utilities');
+    expect(classifySpendCategory('Flipkart')).toBe('Shopping');
+    expect(classifySpendCategory('Nestaway Rent')).toBe('Rent');
+    expect(classifySpendCategory('HDFC Credit Card')).toBe('Bills');
+  });
 });

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { computeSplit, type SplitParticipantInput, type SplitType } from '@domain/splitting';
-import { formatAmount, fromCents, toCents } from '@domain/money';
+import { formatINR, fromCents, toCents } from '@domain/money';
 import { COLORS } from '../theme';
 import { EXPENSE_CATEGORIES, type WebDocument, type WebExpense, type WebGroup } from '../store';
 
@@ -19,7 +19,7 @@ interface Props {
 
 const SPLIT_TYPES: { key: SplitType; label: string }[] = [
   { key: 'equal', label: 'Equally' },
-  { key: 'exact', label: 'Exact $' },
+  { key: 'exact', label: 'Exact ₹' },
   { key: 'percentage', label: '%' },
   { key: 'share', label: 'Shares' },
   { key: 'adjustment', label: '+/− adj' },
@@ -113,7 +113,7 @@ export default function ExpenseForm({ group, receiptDocs, initial, prefillReceip
         .filter((p) => p.cents > 0);
       const sum = payers.reduce((s, p) => s + p.cents, 0);
       if (sum !== totalCents) {
-        return setError(`Payers add up to $${formatAmount(sum)}, but the total is $${formatAmount(totalCents)}.`);
+        return setError(`Payers add up to ${formatINR(sum)}, but the total is ${formatINR(totalCents)}.`);
       }
     }
 
@@ -150,7 +150,7 @@ export default function ExpenseForm({ group, receiptDocs, initial, prefillReceip
   }
 
   const needsValues = splitType !== 'equal';
-  const valueHint = splitType === 'percentage' ? '%' : splitType === 'share' ? 'shares' : '$';
+  const valueHint = splitType === 'percentage' ? '%' : splitType === 'share' ? 'shares' : '₹';
 
   return (
     <ScrollView style={styles.wrap} contentContainerStyle={{ paddingBottom: 8 }}>
@@ -158,7 +158,7 @@ export default function ExpenseForm({ group, receiptDocs, initial, prefillReceip
         <View style={styles.fromReceipt}>
           <Text style={styles.fromReceiptText}>
             📎 Splitting from receipt: {prefillReceipt.vendor}
-            {prefillReceipt.totalCents != null ? ` · $${formatAmount(prefillReceipt.totalCents)}` : ''}
+            {prefillReceipt.totalCents != null ? ` · ${formatINR(prefillReceipt.totalCents)}` : ''}
           </Text>
         </View>
       )}
@@ -174,7 +174,7 @@ export default function ExpenseForm({ group, receiptDocs, initial, prefillReceip
                 onPress={() => pickReceipt(d)}
               >
                 <Text style={[styles.chipText, sourceDocumentId === d.id && styles.chipTextActive]}>
-                  {d.vendor} ${d.totalCents != null ? formatAmount(d.totalCents) : ''}
+                  {d.vendor} {d.totalCents != null ? formatINR(d.totalCents) : ''}
                 </Text>
               </Pressable>
             ))}
@@ -187,7 +187,7 @@ export default function ExpenseForm({ group, receiptDocs, initial, prefillReceip
 
       <View style={styles.rowTwo}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.label}>Amount ($)</Text>
+          <Text style={styles.label}>Amount (₹)</Text>
           <TextInput style={styles.input} value={total} onChangeText={setTotal} placeholder="0.00" keyboardType="decimal-pad" />
         </View>
         <View style={{ flex: 1 }}>
@@ -245,7 +245,7 @@ export default function ExpenseForm({ group, receiptDocs, initial, prefillReceip
                 style={styles.valueInput}
                 value={perPayer[m.id] ?? ''}
                 onChangeText={(v) => setPerPayer((prev) => ({ ...prev, [m.id]: v }))}
-                placeholder="$ paid"
+                placeholder="₹ paid"
                 keyboardType="decimal-pad"
               />
             </View>
@@ -296,13 +296,13 @@ export default function ExpenseForm({ group, receiptDocs, initial, prefillReceip
 
 const styles = StyleSheet.create({
   wrap: { backgroundColor: '#fff', borderWidth: 1, borderColor: COLORS.border, borderRadius: 16, padding: 14, marginBottom: 12 },
-  fromReceipt: { backgroundColor: '#eef6ff', borderRadius: 8, padding: 10, marginBottom: 4 },
-  fromReceiptText: { color: '#1e40af', fontSize: 13, fontWeight: '600' },
+  fromReceipt: { backgroundColor: COLORS.accentSoft, borderRadius: 8, padding: 10, marginBottom: 4 },
+  fromReceiptText: { color: COLORS.primaryDark, fontSize: 13, fontWeight: '600' },
   label: { fontSize: 13, fontWeight: '600', color: COLORS.subtext, marginTop: 10, marginBottom: 6 },
   input: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 9, fontSize: 15, color: COLORS.text, backgroundColor: '#fff' },
   rowTwo: { flexDirection: 'row', gap: 10 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  chip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, backgroundColor: '#e6eaf0' },
+  chip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, backgroundColor: COLORS.chip },
   chipActive: { backgroundColor: COLORS.primary },
   chipText: { fontSize: 12, color: COLORS.text, fontWeight: '600' },
   chipTextActive: { color: '#fff' },

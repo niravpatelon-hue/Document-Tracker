@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { computeNetBalances, simplifyDebts } from '@domain/settleup/simplify';
 import { buildSettleUpLink } from '@domain/settleup/deeplinks';
-import { formatAmount, toCents } from '@domain/money';
+import { formatINR, toCents } from '@domain/money';
 import { COLORS } from '../theme';
 import { Card, HeroCard, Icon, IconChip, SectionLabel, StatusPill, heroText } from '../components/ui';
 import type { WebDocument, WebExpense, WebGroup, WebSettlement } from '../store';
@@ -32,10 +32,6 @@ export default function GroupDetailScreen({
   onRecordSettlement,
 }: Props) {
   const nameOf = (id: string) => group.members.find((m) => m.id === id)?.name ?? id;
-  const venmoOf = (id: string) => {
-    const m = group.members.find((x) => x.id === id);
-    return m?.venmo ?? (m?.name ?? id).toLowerCase().replace(/\s+/g, '-');
-  };
 
   const { balances, transfers } = useMemo(() => {
     const b = computeNetBalances(
@@ -103,7 +99,7 @@ export default function GroupDetailScreen({
       <HeroCard>
         <Text style={heroText.cap}>Your balance in this group</Text>
         <Text style={[heroText.money, { color: youNet > 0 ? '#6ee7a8' : youNet < 0 ? '#fca5a5' : '#fff' }]}>
-          {youNet < 0 ? '-' : ''}${formatAmount(Math.abs(youNet))}
+          {youNet < 0 ? '-' : ''}{formatINR(Math.abs(youNet))}
         </Text>
         <Text style={heroText.sub}>
           {youNet === 0 ? "You're all settled up" : youNet > 0 ? 'You are owed' : 'You owe'}
@@ -126,7 +122,7 @@ export default function GroupDetailScreen({
           <View key={b.userId} style={[styles.balRow, i > 0 && styles.divider]}>
             <Text style={styles.balName}>{nameOf(b.userId)}</Text>
             <Text style={[styles.balNet, { color: b.net > 0 ? COLORS.good : b.net < 0 ? COLORS.danger : COLORS.subtext }]}>
-              {b.net === 0 ? 'settled' : b.net > 0 ? `gets $${formatAmount(b.net)}` : `owes $${formatAmount(-b.net)}`}
+              {b.net === 0 ? 'settled' : b.net > 0 ? `gets ${formatINR(b.net)}` : `owes ${formatINR(-b.net)}`}
             </Text>
           </View>
         ))}
@@ -140,7 +136,6 @@ export default function GroupDetailScreen({
           ) : (
             transfers.map((t, i) => {
               const toMember = group.members.find((m) => m.id === t.to);
-              const venmoLink = buildSettleUpLink({ provider: 'venmo', username: venmoOf(t.to) }, { amount: t.amount, note: group.name });
               const upiLink = toMember?.upi
                 ? buildSettleUpLink({ provider: 'upi', vpa: toMember.upi, payeeName: toMember.name }, { amount: t.amount, note: group.name })
                 : null;
@@ -148,15 +143,12 @@ export default function GroupDetailScreen({
               return (
                 <View key={i} style={styles.settle}>
                   <Text style={styles.settleText}>
-                    {nameOf(t.from)} → {nameOf(t.to)} <Text style={styles.bold}>${formatAmount(t.amount)}</Text>
+                    {nameOf(t.from)} → {nameOf(t.to)} <Text style={styles.bold}>{formatINR(t.amount)}</Text>
                   </Text>
                   <View style={styles.settleBtns}>
-                    <Pressable style={styles.venmo} onPress={() => openLink(venmoLink)}>
-                      <Text style={styles.venmoText}>Venmo</Text>
-                    </Pressable>
                     {upiLink ? (
                       <Pressable style={styles.upi} onPress={() => openLink(upiLink)}>
-                        <Text style={styles.upiText}>UPI</Text>
+                        <Text style={styles.upiText}>Pay via UPI</Text>
                       </Pressable>
                     ) : null}
                     <Pressable style={styles.markBtn} onPress={() => onRecordSettlement({ groupId: group.id, fromUser: t.from, toUser: t.to, amount: t.amount })}>
@@ -174,7 +166,7 @@ export default function GroupDetailScreen({
             <MemberPicker members={group.members} value={sTo} onChange={setSTo} />
           </View>
           <View style={styles.payAmountRow}>
-            <TextInput style={styles.payInput} value={sAmount} onChangeText={setSAmount} placeholder="$ amount" keyboardType="decimal-pad" />
+            <TextInput style={styles.payInput} value={sAmount} onChangeText={setSAmount} placeholder="₹ amount" keyboardType="decimal-pad" />
             <Pressable
               style={styles.recordBtn}
               onPress={() => {
@@ -192,13 +184,13 @@ export default function GroupDetailScreen({
       )}
 
       {detail && (
-        <Card style={{ marginTop: 12, backgroundColor: '#eef6ff', borderColor: '#dbeafe' }}>
+        <Card style={{ marginTop: 12, backgroundColor: COLORS.accentSoft, borderColor: COLORS.accentSoft }}>
           <Text style={styles.detailTitle}>{detail.description}</Text>
-          <Text style={styles.detailMeta}>${formatAmount(detail.totalCents)} · {detail.dateISO} · {detail.category}</Text>
-          <Text style={styles.detailMeta}>Paid by {detail.payers.map((p) => `${nameOf(p.userId)} $${formatAmount(p.cents)}`).join(', ')}</Text>
+          <Text style={styles.detailMeta}>{formatINR(detail.totalCents)} · {detail.dateISO} · {detail.category}</Text>
+          <Text style={styles.detailMeta}>Paid by {detail.payers.map((p) => `${nameOf(p.userId)} ${formatINR(p.cents)}`).join(', ')}</Text>
           <Text style={styles.detailMeta}>Split {detail.splitType} among {detail.involvedIds.length}:</Text>
           {detail.allocations.map((a) => (
-            <Text key={a.userId} style={styles.detailAlloc}>• {nameOf(a.userId)} owes ${formatAmount(a.cents)}</Text>
+            <Text key={a.userId} style={styles.detailAlloc}>• {nameOf(a.userId)} owes {formatINR(a.cents)}</Text>
           ))}
           {detail.notes ? <Text style={styles.detailNotes}>“{detail.notes}”</Text> : null}
           <View style={styles.detailBtns}>
@@ -223,9 +215,9 @@ export default function GroupDetailScreen({
               const s = item.set;
               return (
                 <View key={`s${i}`} style={[styles.feedRow, i > 0 && styles.divider]}>
-                  <IconChip name="check" bg="#e6f6ee" fg={COLORS.good} size={36} />
+                  <IconChip name="check" bg={COLORS.incomeSoft} fg={COLORS.good} size={36} />
                   <Text style={[styles.feedText, { flex: 1, marginLeft: 12 }]}>
-                    {nameOf(s.fromUser)} paid {nameOf(s.toUser)} <Text style={styles.bold}>${formatAmount(s.amount)}</Text>
+                    {nameOf(s.fromUser)} paid {nameOf(s.toUser)} <Text style={styles.bold}>{formatINR(s.amount)}</Text>
                   </Text>
                 </View>
               );
@@ -234,15 +226,15 @@ export default function GroupDetailScreen({
             const yourShare = e.allocations.find((a) => a.userId === 'u_you')?.cents ?? 0;
             return (
               <Pressable key={e.id} style={[styles.feedRow, i > 0 && styles.divider]} onPress={() => setDetailId(e.id)}>
-                <IconChip name={e.sourceDocumentId ? 'receipt' : 'tag'} bg="#e0e7ff" fg="#4f46e5" size={36} />
+                <IconChip name={e.sourceDocumentId ? 'receipt' : 'tag'} bg={COLORS.accentSoft} fg={COLORS.primary} size={36} />
                 <View style={{ flex: 1, marginLeft: 12 }}>
                   <Text style={styles.feedText}>{e.description}{e.sourceDocumentId ? '  📎' : ''}</Text>
                   <Text style={styles.feedMeta}>
-                    {nameOf(e.payers[0]?.userId ?? '')}{e.payers.length > 1 ? ' +' : ''} paid ${formatAmount(e.totalCents)}
-                    {yourShare > 0 ? ` · you owe $${formatAmount(yourShare)}` : ''}
+                    {nameOf(e.payers[0]?.userId ?? '')}{e.payers.length > 1 ? ' +' : ''} paid {formatINR(e.totalCents)}
+                    {yourShare > 0 ? ` · you owe ${formatINR(yourShare)}` : ''}
                   </Text>
                 </View>
-                <Text style={styles.feedAmt}>${formatAmount(e.totalCents)}</Text>
+                <Text style={styles.feedAmt}>{formatINR(e.totalCents)}</Text>
               </Pressable>
             );
           })
@@ -281,8 +273,6 @@ const styles = StyleSheet.create({
   settleText: { fontSize: 15, color: COLORS.text },
   bold: { fontWeight: '800' },
   settleBtns: { flexDirection: 'row', gap: 8, marginTop: 8 },
-  venmo: { backgroundColor: '#008CFF', borderRadius: 8, paddingVertical: 7, paddingHorizontal: 14 },
-  venmoText: { color: '#fff', fontWeight: '700' },
   upi: { backgroundColor: '#5f259f', borderRadius: 8, paddingVertical: 7, paddingHorizontal: 14 },
   upiText: { color: '#fff', fontWeight: '700' },
   markBtn: { backgroundColor: COLORS.chip, borderRadius: 8, paddingVertical: 7, paddingHorizontal: 14 },

@@ -10,11 +10,19 @@ import {
   newId,
   saveState,
   saveUser,
+  type AppMode,
+  type BusinessProfile,
   type CreateDocInput,
+  type InvoiceStatus,
   type WebBudget,
+  type WebBusinessExpense,
+  type WebClient,
   type WebDocument,
   type WebExpense,
   type WebGroup,
+  type WebIncome,
+  type WebInvoice,
+  type WebMileageTrip,
   type WebSettlement,
   type WebTransaction,
   type WebUser,
@@ -23,10 +31,15 @@ import { seedState } from './seed';
 import HomeScreen from './screens/HomeScreen';
 import DocumentsScreen from './screens/DocumentsScreen';
 import ReviewScreen from './screens/ReviewScreen';
-import SpendAnalysisScreen from './screens/SpendAnalysisScreen';
+import SpendingsScreen from './screens/SpendingsScreen';
 import TrackedItemsScreen from './screens/TrackedItemsScreen';
 import GroupsScreen from './screens/GroupsScreen';
 import GroupDetailScreen from './screens/GroupDetailScreen';
+import BusinessScreen from './screens/BusinessScreen';
+import InvoicesScreen from './screens/InvoicesScreen';
+import ClientsScreen from './screens/ClientsScreen';
+import GSTScreen from './screens/GSTScreen';
+import MileageScreen from './screens/MileageScreen';
 import LoginScreen from './screens/LoginScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import TabBar, { type TabKey } from './components/TabBar';
@@ -53,8 +66,13 @@ type Route =
   | { name: 'analytics' }
   | { name: 'tracked' }
   | { name: 'groups' }
-  | { name: 'profile' }
-  | { name: 'group'; groupId: string; prefillDocId?: string };
+  | { name: 'group'; groupId: string; prefillDocId?: string }
+  | { name: 'business' }
+  | { name: 'invoices' }
+  | { name: 'clients' }
+  | { name: 'gst' }
+  | { name: 'mileage' }
+  | { name: 'profile' };
 
 /** A blank prefill for adding an item by hand (no scan). */
 function blankPrefill(category: DocumentCategory): ReviewPrefill {
@@ -80,20 +98,32 @@ const TITLES: Record<string, string> = {
   analytics: 'Spending',
   tracked: 'Tracked items',
   groups: 'Groups',
+  business: 'Business',
+  invoices: 'Invoices',
+  clients: 'Clients',
+  gst: 'GST & Tax',
+  mileage: 'Mileage',
   profile: 'Profile',
 };
 
-const TAB_ROUTES = new Set(['home', 'analytics', 'groups', 'profile', 'documents', 'tracked']);
-const BACK_ROUTES = new Set(['review', 'group']);
+const TAB_ROUTES = new Set(['home', 'analytics', 'groups', 'business', 'profile', 'documents', 'tracked']);
+const BACK_ROUTES = new Set(['review', 'group', 'invoices', 'clients', 'gst', 'mileage']);
+const EMPTY_BUSINESS_PROFILE: BusinessProfile = { name: '', gstin: '' };
 
 export default function App() {
   const [route, setRoute] = useState<Route>({ name: 'home' });
   const [documents, setDocuments] = useState<WebDocument[]>([]);
   const [transactions, setTransactions] = useState<WebTransaction[]>([]);
+  const [incomes, setIncomes] = useState<WebIncome[]>([]);
   const [budgets, setBudgets] = useState<WebBudget[]>([]);
   const [groups, setGroups] = useState<WebGroup[]>([]);
   const [expenses, setExpenses] = useState<WebExpense[]>([]);
   const [settlements, setSettlements] = useState<WebSettlement[]>([]);
+  const [businessProfile, setBusinessProfile] = useState<BusinessProfile>(EMPTY_BUSINESS_PROFILE);
+  const [clients, setClients] = useState<WebClient[]>([]);
+  const [invoices, setInvoices] = useState<WebInvoice[]>([]);
+  const [mileage, setMileage] = useState<WebMileageTrip[]>([]);
+  const [businessExpenses, setBusinessExpenses] = useState<WebBusinessExpense[]>([]);
   const [user, setUser] = useState<WebUser | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -101,21 +131,51 @@ export default function App() {
     const s = loadState() ?? seedState();
     setDocuments(s.documents ?? []);
     setTransactions(s.transactions ?? []);
+    setIncomes(s.incomes ?? []);
     setBudgets(s.budgets ?? []);
     setGroups(s.groups ?? []);
     setExpenses(s.expenses ?? []);
     setSettlements(s.settlements ?? []);
+    setBusinessProfile(s.businessProfile ?? EMPTY_BUSINESS_PROFILE);
+    setClients(s.clients ?? []);
+    setInvoices(s.invoices ?? []);
+    setMileage(s.mileage ?? []);
+    setBusinessExpenses(s.businessExpenses ?? []);
     setUser(loadUser());
     setLoaded(true);
   }, []);
 
   useEffect(() => {
     if (loaded) {
-      saveState({ documents, transactions, budgets, groups, expenses, settlements });
+      saveState({
+        documents,
+        transactions,
+        incomes,
+        budgets,
+        groups,
+        expenses,
+        settlements,
+        businessProfile,
+        clients,
+        invoices,
+        mileage,
+        businessExpenses,
+      });
     }
-  }, [documents, transactions, budgets, groups, expenses, settlements, loaded]);
+  }, [documents, transactions, incomes, budgets, groups, expenses, settlements, businessProfile, clients, invoices, mileage, businessExpenses, loaded]);
 
   const navigate = useCallback((next: Route) => setRoute(next), []);
+  const mode: AppMode = user?.mode ?? 'personal';
+
+  const setMode = useCallback((m: AppMode) => {
+    setUser((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, mode: m };
+      saveUser(next);
+      return next;
+    });
+    setRoute({ name: 'home' });
+  }, []);
 
   const addDocument = useCallback(
     (input: CreateDocInput): WebDocument[] => {
@@ -144,24 +204,45 @@ export default function App() {
       ? 'analytics'
       : route.name === 'groups'
       ? 'groups'
+      : route.name === 'business'
+      ? 'business'
       : route.name === 'profile'
       ? 'profile'
       : null;
 
-  const goBack = () => navigate(route.name === 'group' ? { name: 'groups' } : { name: 'home' });
+  const goBack = () => {
+    if (route.name === 'group') return navigate({ name: 'groups' });
+    if (route.name === 'invoices' || route.name === 'clients' || route.name === 'gst' || route.name === 'mileage') {
+      return navigate({ name: 'business' });
+    }
+    return navigate({ name: 'home' });
+  };
 
   const body = useMemo(() => {
     switch (route.name) {
       case 'home':
         return (
           <HomeScreen
+            mode={mode}
             userName={user?.name ?? null}
-            documents={documents}
             transactions={transactions}
-            onOpenReceipts={() => navigate({ name: 'documents' })}
-            onOpenWarranty={() => navigate({ name: 'tracked' })}
-            onOpenLoyalty={() => navigate({ name: 'tracked' })}
+            incomes={incomes}
+            documents={documents}
+            groups={groups}
+            invoices={invoices}
+            clients={clients}
+            businessExpenses={businessExpenses}
+            mileage={mileage}
+            businessProfile={businessProfile}
+            onScan={() => navigate({ name: 'documents', autoScan: true })}
             onOpenSpending={() => navigate({ name: 'analytics' })}
+            onOpenReceipts={() => navigate({ name: 'documents' })}
+            onOpenTracked={() => navigate({ name: 'tracked' })}
+            onOpenGroups={() => navigate({ name: 'groups' })}
+            onOpenInvoices={() => navigate({ name: 'invoices' })}
+            onOpenGST={() => navigate({ name: 'gst' })}
+            onOpenClients={() => navigate({ name: 'clients' })}
+            onOpenMileage={() => navigate({ name: 'mileage' })}
           />
         );
       case 'documents':
@@ -190,9 +271,19 @@ export default function App() {
         );
       case 'analytics':
         return (
-          <SpendAnalysisScreen
+          <SpendingsScreen
+            mode={mode}
             transactions={transactions}
+            incomes={incomes}
             budgets={budgets}
+            businessExpenses={businessExpenses}
+            onScan={() => navigate({ name: 'documents', autoScan: true })}
+            onAddExpense={() =>
+              mode === 'business'
+                ? navigate({ name: 'gst' })
+                : navigate({ name: 'review', prefill: blankPrefill('bills_receipts') })
+            }
+            onOpenMileage={() => navigate({ name: 'mileage' })}
             onAddBudget={(b) => setBudgets((prev) => [...prev, { ...b, id: newId() }])}
             onDeleteBudget={(id) => setBudgets((prev) => prev.filter((x) => x.id !== id))}
           />
@@ -241,13 +332,75 @@ export default function App() {
           />
         );
       }
+      case 'business':
+        return (
+          <BusinessScreen
+            businessProfile={businessProfile}
+            invoices={invoices}
+            clients={clients}
+            businessExpenses={businessExpenses}
+            mileage={mileage}
+            onOpenInvoices={() => navigate({ name: 'invoices' })}
+            onOpenClients={() => navigate({ name: 'clients' })}
+            onOpenGST={() => navigate({ name: 'gst' })}
+            onOpenMileage={() => navigate({ name: 'mileage' })}
+            onOpenExpenses={() => navigate({ name: 'analytics' })}
+          />
+        );
+      case 'invoices':
+        return (
+          <InvoicesScreen
+            invoices={invoices}
+            clients={clients}
+            businessProfile={businessProfile}
+            onCreate={(inv) => setInvoices((prev) => [{ ...inv, id: newId(), createdAt: Date.now() }, ...prev])}
+            onUpdateStatus={(id, status: InvoiceStatus) =>
+              setInvoices((prev) => prev.map((iv) => (iv.id === id ? { ...iv, status } : iv)))
+            }
+            onDelete={(id) => setInvoices((prev) => prev.filter((iv) => iv.id !== id))}
+            onOpenClients={() => navigate({ name: 'clients' })}
+          />
+        );
+      case 'clients':
+        return (
+          <ClientsScreen
+            clients={clients}
+            invoices={invoices}
+            onCreate={(c) => setClients((prev) => [{ ...c, id: newId(), createdAt: Date.now() }, ...prev])}
+            onDelete={(id) => setClients((prev) => prev.filter((c) => c.id !== id))}
+          />
+        );
+      case 'gst':
+        return (
+          <GSTScreen
+            businessExpenses={businessExpenses}
+            invoices={invoices}
+            businessProfile={businessProfile}
+            onAddExpense={(e) => setBusinessExpenses((prev) => [{ ...e, id: newId(), createdAt: Date.now() }, ...prev])}
+            onDeleteExpense={(id) => setBusinessExpenses((prev) => prev.filter((x) => x.id !== id))}
+          />
+        );
+      case 'mileage':
+        return (
+          <MileageScreen
+            mileage={mileage}
+            onAdd={(t) => setMileage((prev) => [{ ...t, id: newId(), createdAt: Date.now() }, ...prev])}
+            onDelete={(id) => setMileage((prev) => prev.filter((t) => t.id !== id))}
+          />
+        );
       case 'profile':
         return user ? (
           <ProfileScreen
             user={user}
+            mode={mode}
+            onSetMode={setMode}
+            businessProfile={businessProfile}
+            onSaveBusinessProfile={(p) => setBusinessProfile(p)}
             documentsCount={documents.length}
             trackedCount={documents.filter((d) => d.category === 'warranty' || d.category === 'loyalty').length}
             groupsCount={groups.length}
+            invoicesCount={invoices.length}
+            clientsCount={clients.length}
             onSignOut={() => {
               saveUser(null);
               setUser(null);
@@ -258,7 +411,7 @@ export default function App() {
       default:
         return null;
     }
-  }, [route, documents, transactions, budgets, groups, expenses, settlements, navigate, addDocument, user]);
+  }, [route, mode, documents, transactions, incomes, budgets, groups, expenses, settlements, businessProfile, clients, invoices, mileage, businessExpenses, navigate, addDocument, setMode, user]);
 
   const headerTitle = route.name === 'group' ? groups.find((g) => g.id === route.groupId)?.name ?? 'Group' : TITLES[route.name];
 
@@ -268,8 +421,9 @@ export default function App() {
         <View style={styles.phone}>
           <LoginScreen
             onSignIn={(u) => {
-              saveUser(u);
-              setUser(u);
+              const withMode: WebUser = { ...u, mode: 'personal' };
+              saveUser(withMode);
+              setUser(withMode);
             }}
           />
         </View>
@@ -300,6 +454,7 @@ export default function App() {
         {showTabBar ? (
           <TabBar
             active={activeTab}
+            mode={mode}
             onNavigate={(tab) => navigate({ name: tab } as Route)}
             onScan={() => navigate({ name: 'documents', autoScan: true })}
           />

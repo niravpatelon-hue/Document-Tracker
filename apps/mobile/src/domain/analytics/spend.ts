@@ -106,12 +106,14 @@ export function yearOverYear(txns: SpendTxn[], yearKey: string): PeriodCompariso
  * keyword match wins; order matters (more specific buckets first).
  */
 const SPEND_CATEGORY_RULES: { category: string; keywords: string[] }[] = [
-  { category: 'Fuel', keywords: ['shell', 'chevron', 'exxon', 'bp', 'texaco', 'gas', 'fuel', 'petrol'] },
-  { category: 'Dining', keywords: ['coffee', 'cafe', 'caffe', 'restaurant', 'pizza', 'bottle', 'starbucks', 'mcdonald', 'grill', 'kitchen', 'diner', 'bar ', 'bakery', 'deli'] },
-  { category: 'Groceries', keywords: ['trader joe', 'whole foods', 'safeway', 'kroger', 'aldi', 'costco', 'grocery', 'mart', 'market', 'foods'] },
-  { category: 'Transport', keywords: ['uber', 'lyft', 'transit', 'parking', 'metro', 'toll', 'airline', 'airlines', 'flight'] },
-  { category: 'Utilities', keywords: ['electric', 'water', 'internet', 'comcast', 'at&t', 'verizon', 'utility', 'power', 'energy'] },
-  { category: 'Shopping', keywords: ['amazon', 'target', 'walmart', 'best buy', 'store', 'mall', 'shop', 'ikea'] },
+  { category: 'Rent', keywords: ['rent', 'lease', 'nestaway', 'nobroker', 'landlord', 'maintenance', 'society', 'hostel', 'pg '] },
+  { category: 'Bills', keywords: ['credit card', 'card bill', ' emi', 'loan', 'insurance', 'premium', 'lic ', 'sip', 'mutual fund', 'bajaj finance'] },
+  { category: 'Fuel', keywords: ['shell', 'chevron', 'exxon', 'bp', 'texaco', 'gas', 'fuel', 'petrol', 'indian oil', 'iocl', 'bharat petroleum', 'bpcl', 'hpcl', 'nayara', 'diesel'] },
+  { category: 'Dining', keywords: ['coffee', 'cafe', 'caffe', 'restaurant', 'pizza', 'bottle', 'starbucks', 'mcdonald', 'grill', 'kitchen', 'diner', 'bar ', 'bakery', 'deli', 'swiggy', 'zomato', 'domino', 'haldiram', 'barista', 'chai', 'biryani', 'dhaba', 'eatery', 'chaayos'] },
+  { category: 'Groceries', keywords: ['trader joe', 'whole foods', 'safeway', 'kroger', 'aldi', 'costco', 'grocery', 'mart', 'market', 'foods', 'bigbasket', 'big basket', 'blinkit', 'zepto', 'grofers', 'jiomart', 'reliance fresh', 'spencer', 'nature basket'] },
+  { category: 'Transport', keywords: ['uber', 'lyft', 'transit', 'parking', 'metro', 'toll', 'airline', 'airlines', 'flight', 'ola', 'rapido', 'irctc', 'ixigo', 'redbus', 'indigo', 'spicejet', 'vistara', 'air india', 'fastag', 'bmtc', 'ksrtc'] },
+  { category: 'Utilities', keywords: ['electric', 'water', 'internet', 'comcast', 'at&t', 'verizon', 'utility', 'power', 'energy', 'bescom', 'bses', 'tata power', 'adani electricity', 'mahadiscom', 'airtel', 'jio', 'vodafone', 'act fibernet', 'broadband', 'recharge', 'dth', 'tata sky', 'gas bill'] },
+  { category: 'Shopping', keywords: ['amazon', 'target', 'walmart', 'best buy', 'store', 'mall', 'shop', 'ikea', 'flipkart', 'myntra', 'ajio', 'meesho', 'croma', 'reliance digital', 'tata neu', 'nykaa', 'snapdeal', 'decathlon', 'lifestyle'] },
 ];
 
 export function classifySpendCategory(vendor: string | null | undefined): string {

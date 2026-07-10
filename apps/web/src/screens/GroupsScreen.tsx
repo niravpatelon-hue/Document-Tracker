@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { computeNetBalances } from '@domain/settleup/simplify';
-import { formatAmount } from '@domain/money';
+import { formatINR } from '@domain/money';
 import { COLORS } from '../theme';
 import { Card, HeroCard, Icon, IconChip, SectionLabel, StatusPill, heroText } from '../components/ui';
 import { newId, type WebExpense, type WebGroup, type WebSettlement } from '../store';
@@ -56,7 +56,7 @@ export default function GroupsScreen({ groups, expenses, settlements, onOpenGrou
       <HeroCard>
         <Text style={heroText.cap}>Across all groups</Text>
         <Text style={[heroText.money, { color: overall > 0 ? '#6ee7a8' : overall < 0 ? '#fca5a5' : '#fff' }]}>
-          {overall < 0 ? '-' : ''}${formatAmount(Math.abs(overall))}
+          {overall < 0 ? '-' : ''}{formatINR(Math.abs(overall))}
         </Text>
         <Text style={heroText.sub}>
           {overall === 0 ? "You're all settled up" : overall > 0 ? 'You are owed overall' : 'You owe overall'}
@@ -105,13 +105,13 @@ export default function GroupsScreen({ groups, expenses, settlements, onOpenGrou
           return (
             <Pressable key={g.id} onPress={() => onOpenGroup(g.id)}>
               <Card style={{ marginBottom: 10, flexDirection: 'row', alignItems: 'center' }}>
-                <IconChip name="users" bg="#e0e7ff" fg="#4f46e5" size={40} />
+                <IconChip name="users" bg={COLORS.accentSoft} fg={COLORS.primary} size={40} />
                 <View style={{ flex: 1, marginLeft: 12 }}>
                   <Text style={styles.groupName}>{g.name}</Text>
                   <Text style={styles.groupMeta}>{g.type} · {g.members.length} members</Text>
                 </View>
                 <StatusPill
-                  text={net === 0 ? 'settled' : net > 0 ? `+$${formatAmount(net)}` : `-$${formatAmount(-net)}`}
+                  text={net === 0 ? 'settled' : net > 0 ? `+${formatINR(net)}` : `-${formatINR(-net)}`}
                   tone={net > 0 ? 'good' : net < 0 ? 'danger' : 'neutral'}
                 />
               </Card>
@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
   chipTextActive: { color: '#fff' },
   memberChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
   memberChip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, backgroundColor: COLORS.chip },
-  you: { backgroundColor: '#dbeafe' },
+  you: { backgroundColor: COLORS.accentSoft },
   memberChipText: { fontSize: 12, color: COLORS.text, fontWeight: '600' },
   addRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
   addBtn: { backgroundColor: COLORS.chip, borderRadius: 8, paddingHorizontal: 16, justifyContent: 'center' },

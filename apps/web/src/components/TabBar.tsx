@@ -1,11 +1,13 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { COLORS } from '../theme';
+import type { AppMode } from '../store';
 
-export type TabKey = 'home' | 'analytics' | 'groups' | 'profile';
+export type TabKey = 'home' | 'analytics' | 'groups' | 'business' | 'profile';
 
 interface Props {
   active: TabKey | null;
+  mode: AppMode;
   onNavigate: (tab: TabKey) => void;
   onScan: () => void;
 }
@@ -44,6 +46,13 @@ function Icon({ name, color, size = 22 }: { name: TabKey | 'scan'; color: string
           <path d="M3 20c0-3 3-5 6-5s6 2 6 5" />
         </svg>
       );
+    case 'business':
+      return (
+        <svg {...common}>
+          <rect x="3" y="7" width="18" height="13" rx="2" />
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" />
+        </svg>
+      );
     case 'profile':
       return (
         <svg {...common}>
@@ -63,16 +72,17 @@ function Icon({ name, color, size = 22 }: { name: TabKey | 'scan'; color: string
   }
 }
 
-const TABS: { key: TabKey; label: string }[] = [
-  { key: 'home', label: 'Home' },
-  { key: 'analytics', label: 'Spending' },
-  { key: 'groups', label: 'Groups' },
-  { key: 'profile', label: 'Profile' },
-];
-
-export default function TabBar({ active, onNavigate, onScan }: Props) {
-  const left = TABS.slice(0, 2);
-  const right = TABS.slice(2);
+export default function TabBar({ active, mode, onNavigate, onScan }: Props) {
+  const thirdTab: { key: TabKey; label: string } =
+    mode === 'business' ? { key: 'business', label: 'Business' } : { key: 'groups', label: 'Groups' };
+  const tabs: { key: TabKey; label: string }[] = [
+    { key: 'home', label: 'Home' },
+    { key: 'analytics', label: 'Spending' },
+    thirdTab,
+    { key: 'profile', label: 'Profile' },
+  ];
+  const left = tabs.slice(0, 2);
+  const right = tabs.slice(2);
   return (
     <View style={styles.bar}>
       {left.map((t) => (

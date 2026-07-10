@@ -6,7 +6,9 @@ import { COLORS } from '../theme';
 export type IconName =
   | 'home' | 'chart' | 'users' | 'user' | 'receipt' | 'shield' | 'star' | 'camera'
   | 'bell' | 'chevron' | 'plus' | 'check' | 'calendar' | 'download' | 'trash'
-  | 'edit' | 'close' | 'tag' | 'wallet' | 'doc';
+  | 'edit' | 'close' | 'tag' | 'wallet' | 'doc'
+  | 'arrowUp' | 'arrowDown' | 'send' | 'request' | 'more' | 'percent' | 'fileText'
+  | 'truck' | 'briefcase' | 'building' | 'filter' | 'search' | 'clock' | 'refresh' | 'mapPin';
 
 export function Icon({
   name,
@@ -50,6 +52,21 @@ export function Icon({
     case 'tag': return (<svg {...c}><path d="M3 12l9-9h7v7l-9 9z" /><circle cx="15.5" cy="8.5" r="1.4" /></svg>);
     case 'wallet': return (<svg {...c}><rect x="3" y="6" width="18" height="13" rx="3" /><path d="M16 12h4" /></svg>);
     case 'doc': return (<svg {...c}><path d="M7 3h7l4 4v14H7z" /><path d="M9 11h6M9 15h4" /></svg>);
+    case 'arrowUp': return (<svg {...c}><path d="M12 20V5M6 11l6-6 6 6" /></svg>);
+    case 'arrowDown': return (<svg {...c}><path d="M12 4v15M6 13l6 6 6-6" /></svg>);
+    case 'send': return (<svg {...c}><path d="M21 3L10 14M21 3l-7 18-4-7-7-4z" /></svg>);
+    case 'request': return (<svg {...c}><path d="M3 21L14 10M3 21l7-2 2-7M14 10l7-7" /></svg>);
+    case 'more': return (<svg {...c}><circle cx="5" cy="12" r="1.4" /><circle cx="12" cy="12" r="1.4" /><circle cx="19" cy="12" r="1.4" /></svg>);
+    case 'percent': return (<svg {...c}><path d="M19 5L5 19" /><circle cx="7" cy="7" r="2.2" /><circle cx="17" cy="17" r="2.2" /></svg>);
+    case 'fileText': return (<svg {...c}><path d="M7 3h7l4 4v14H7z" /><path d="M9 12h6M9 16h6M9 8h3" /></svg>);
+    case 'truck': return (<svg {...c}><path d="M3 6h11v9H3zM14 9h4l3 3v3h-7" /><circle cx="7" cy="18" r="1.8" /><circle cx="17.5" cy="18" r="1.8" /></svg>);
+    case 'briefcase': return (<svg {...c}><rect x="3" y="7" width="18" height="12" rx="2" /><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2M3 12h18" /></svg>);
+    case 'building': return (<svg {...c}><rect x="5" y="3" width="14" height="18" rx="1.5" /><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2M10 21v-3h4v3" /></svg>);
+    case 'filter': return (<svg {...c}><path d="M3 5h18l-7 8v6l-4-2v-4z" /></svg>);
+    case 'search': return (<svg {...c}><circle cx="11" cy="11" r="6" /><path d="M16 16l4 4" /></svg>);
+    case 'clock': return (<svg {...c}><circle cx="12" cy="12" r="8" /><path d="M12 8v4l3 2" /></svg>);
+    case 'refresh': return (<svg {...c}><path d="M20 11a8 8 0 10-2 5.3M20 5v6h-6" /></svg>);
+    case 'mapPin': return (<svg {...c}><path d="M12 21c5-5 7-8 7-11a7 7 0 10-14 0c0 3 2 6 7 11z" /><circle cx="12" cy="10" r="2.5" /></svg>);
     default: return null;
   }
 }
@@ -169,3 +186,300 @@ export const heroText = StyleSheet.create({
   money: { color: '#fff', fontSize: 32, fontWeight: '800', letterSpacing: -0.5 },
   sub: { color: '#9fb0d0', fontSize: 12, marginTop: 8 },
 });
+
+/** ---- Helpers ---- */
+let _uid = 0;
+function useUid(prefix: string): string {
+  const ref = React.useRef<string | null>(null);
+  if (ref.current === null) ref.current = `${prefix}-${++_uid}`;
+  return ref.current;
+}
+
+function initials(name: string): string {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+/** Convert a list of points into a smooth-ish cubic path string. */
+function smoothPath(pts: { x: number; y: number }[]): string {
+  if (pts.length === 0) return '';
+  if (pts.length === 1) return `M${pts[0].x},${pts[0].y}`;
+  let d = `M${pts[0].x},${pts[0].y}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i === 0 ? 0 : i - 1];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2 < pts.length ? i + 2 : i + 1];
+    const c1x = p1.x + (p2.x - p0.x) / 6;
+    const c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6;
+    const c2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C${c1x},${c1y} ${c2x},${c2y} ${p2.x},${p2.y}`;
+  }
+  return d;
+}
+
+/** ---- Sparkline: smooth line with soft gradient area fill + end dot ---- */
+export function Sparkline({
+  values,
+  width = 250,
+  height = 40,
+  color = COLORS.income,
+  fillFrom,
+}: {
+  values: number[];
+  width?: number;
+  height?: number;
+  color?: string;
+  fillFrom?: string;
+}) {
+  const gid = useUid('spark');
+  const pad = 4;
+  const w = width;
+  const h = height;
+  const vals = values && values.length ? values : [0, 0];
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const span = max - min || 1;
+  const n = vals.length;
+  const pts = vals.map((v, i) => ({
+    x: pad + (n === 1 ? 0 : (i / (n - 1)) * (w - pad * 2)),
+    y: pad + (1 - (v - min) / span) * (h - pad * 2),
+  }));
+  const line = smoothPath(pts);
+  const area = `${line} L${pts[pts.length - 1].x},${h} L${pts[0].x},${h} Z`;
+  const last = pts[pts.length - 1];
+  const from = fillFrom || color;
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h}>
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={from} stopOpacity={0.28} />
+          <stop offset="100%" stopColor={from} stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      <path d={area} fill={`url(#${gid})`} stroke="none" />
+      <path d={line} fill="none" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={last.x} cy={last.y} r={3} fill={color} />
+    </svg>
+  );
+}
+
+/** ---- WeeklyBarChart: stacked vertical bars per day ---- */
+export function WeeklyBarChart({
+  days,
+  height = 170,
+}: {
+  days: { label: string; segments: { value: number; color: string }[] }[];
+  height?: number;
+}) {
+  const labelH = 20;
+  const chartH = Math.max(40, height - labelH);
+  const totals = days.map((d) => d.segments.reduce((s, seg) => s + Math.max(0, seg.value), 0));
+  const max = Math.max(1, ...totals);
+  const barW = 14;
+  return (
+    <View>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: chartH }}>
+        {days.map((d, di) => {
+          const total = totals[di];
+          const stackH = (total / max) * (chartH - 8);
+          return (
+            <View key={di} style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end', height: '100%' }}>
+              <View
+                style={{
+                  width: barW,
+                  height: Math.max(2, stackH),
+                  borderRadius: 6,
+                  overflow: 'hidden',
+                  flexDirection: 'column-reverse',
+                  backgroundColor: COLORS.track,
+                }}
+              >
+                {d.segments.map((seg, si) => {
+                  const segH = total > 0 ? (Math.max(0, seg.value) / total) * Math.max(2, stackH) : 0;
+                  return <View key={si} style={{ height: segH, backgroundColor: seg.color, width: '100%' }} />;
+                })}
+              </View>
+            </View>
+          );
+        })}
+      </View>
+      <View style={{ height: 1, backgroundColor: COLORS.border, marginTop: 2 }} />
+      <View style={{ flexDirection: 'row', marginTop: 6 }}>
+        {days.map((d, di) => (
+          <Text key={di} style={{ flex: 1, textAlign: 'center', fontSize: 11, color: COLORS.subtext, fontWeight: '600' }}>
+            {d.label}
+          </Text>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/** ---- Gauge: 180° semicircle with track + value arc and centered % ---- */
+export function Gauge({
+  pct,
+  size = 170,
+  color = COLORS.income,
+  label,
+  sublabel,
+}: {
+  pct: number;
+  size?: number;
+  color?: string;
+  label?: string;
+  sublabel?: string;
+}) {
+  const clamped = Math.max(0, Math.min(100, isFinite(pct) ? pct : 0));
+  const stroke = Math.max(8, size * 0.09);
+  const r = (size - stroke) / 2;
+  const cx = size / 2;
+  const cy = size / 2;
+  const w = size;
+  const h = size / 2 + stroke / 2 + 2;
+  const polar = (frac: number) => {
+    const ang = Math.PI - frac * Math.PI; // 180deg -> 0deg
+    return { x: cx + r * Math.cos(ang), y: cy - r * Math.sin(ang) };
+  };
+  const start = polar(0);
+  const end = polar(1);
+  const valEnd = polar(clamped / 100);
+  const largeVal = clamped > 50 ? 1 : 0;
+  const trackD = `M${start.x},${start.y} A${r},${r} 0 1 1 ${end.x},${end.y}`;
+  const valD = `M${start.x},${start.y} A${r},${r} 0 ${largeVal} 1 ${valEnd.x},${valEnd.y}`;
+  return (
+    <View style={{ alignItems: 'center' }}>
+      <View style={{ width: w, height: h, position: 'relative' }}>
+        <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h}>
+          <path d={trackD} fill="none" stroke={COLORS.track} strokeWidth={stroke} strokeLinecap="round" />
+          <path d={valD} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round" />
+        </svg>
+        <View style={{ position: 'absolute', left: 0, right: 0, top: h * 0.34, alignItems: 'center' }}>
+          <Text style={{ fontSize: size * 0.2, fontWeight: '800', color: COLORS.text }}>{Math.round(clamped)}%</Text>
+        </View>
+      </View>
+      {label ? <Text style={{ fontSize: 13, fontWeight: '700', color: COLORS.text, marginTop: 2 }}>{label}</Text> : null}
+      {sublabel ? <Text style={{ fontSize: 12, color: COLORS.subtext, marginTop: 2 }}>{sublabel}</Text> : null}
+    </View>
+  );
+}
+
+/** ---- ProgressBar: rounded track + fill (clamped) ---- */
+export function ProgressBar({
+  pct,
+  color = COLORS.primary,
+  height = 8,
+  track = COLORS.track,
+}: {
+  pct: number;
+  color?: string;
+  height?: number;
+  track?: string;
+}) {
+  const clamped = Math.max(0, Math.min(100, isFinite(pct) ? pct : 0));
+  return (
+    <View style={{ height, borderRadius: height / 2, backgroundColor: track, overflow: 'hidden' }}>
+      <View style={{ width: `${clamped}%`, height: '100%', backgroundColor: color, borderRadius: height / 2 }} />
+    </View>
+  );
+}
+
+/** ---- SegmentBar: single bar split proportionally by value ---- */
+export function SegmentBar({
+  segments,
+  height = 10,
+  radius = 6,
+}: {
+  segments: { value: number; color: string }[];
+  height?: number;
+  radius?: number;
+}) {
+  const total = segments.reduce((s, seg) => s + Math.max(0, seg.value), 0);
+  return (
+    <View style={{ height, borderRadius: radius, backgroundColor: COLORS.track, overflow: 'hidden', flexDirection: 'row' }}>
+      {total > 0
+        ? segments.map((seg, i) => (
+            <View key={i} style={{ flex: Math.max(0, seg.value), backgroundColor: seg.color, height: '100%' }} />
+          ))
+        : null}
+    </View>
+  );
+}
+
+/** ---- CreditCard: blue gradient debit/credit card visual ---- */
+export function CreditCard({
+  holder,
+  last4,
+  expiry,
+  brand = 'VISA',
+}: {
+  holder: string;
+  last4: string;
+  expiry: string;
+  brand?: string;
+}) {
+  return (
+    <View
+      style={
+        {
+          width: '100%',
+          height: 180,
+          borderRadius: 18,
+          padding: 18,
+          justifyContent: 'space-between',
+          backgroundImage: `linear-gradient(135deg, ${COLORS.cardA} 0%, ${COLORS.cardB} 100%)`,
+          boxShadow: '0 16px 30px -16px rgba(30,58,138,0.6)',
+        } as object
+      }
+    >
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <View
+          style={{
+            width: 40,
+            height: 30,
+            borderRadius: 6,
+            backgroundColor: 'rgba(255,255,255,0.85)',
+            borderWidth: 1,
+            borderColor: 'rgba(255,255,255,0.5)',
+          }}
+        />
+        <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 1 }}>{brand}</Text>
+      </View>
+      <Text style={{ color: '#fff', fontSize: 20, fontWeight: '700', letterSpacing: 2 }}>
+        {`••••  ••••  ••••  ${last4}`}
+      </Text>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+        <View>
+          <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 9, fontWeight: '700', letterSpacing: 1 }}>CARD HOLDER</Text>
+          <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700', marginTop: 2 }}>{holder}</Text>
+        </View>
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 9, fontWeight: '700', letterSpacing: 1 }}>EXPIRES</Text>
+          <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700', marginTop: 2 }}>{expiry}</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+/** ---- Avatar: circle with 1-2 letter initials ---- */
+export function Avatar({
+  name,
+  size = 40,
+  bg = COLORS.accentSoft,
+  fg = COLORS.primary,
+}: {
+  name: string;
+  size?: number;
+  bg?: string;
+  fg?: string;
+}) {
+  return (
+    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: bg, alignItems: 'center', justifyContent: 'center' }}>
+      <Text style={{ color: fg, fontWeight: '800', fontSize: size * 0.4 }}>{initials(name)}</Text>
+    </View>
+  );
+}

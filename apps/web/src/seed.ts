@@ -210,9 +210,9 @@ export function seedState(): PersistedState {
 
   const invoices: WebInvoice[] = [
     {
-      id: 'inv-7', number: 'INV-0007', clientId: 'c-nimbus', dateISO: '2026-06-20', dueDateISO: '2026-07-05',
-      items: [{ description: 'UI/UX design retainer — June', qty: 1, rateCents: 15000000, taxRatePct: 18, hsn: '998314' }],
-      status: 'paid', createdAt: now - DAY * 20,
+      id: 'inv-7', number: 'INV-0007', clientId: 'c-nimbus', dateISO: '2026-07-07', dueDateISO: '2026-07-22',
+      items: [{ description: 'UI/UX design retainer — July', qty: 1, rateCents: 15000000, taxRatePct: 18, hsn: '998314' }],
+      status: 'paid', createdAt: now - DAY * 4,
     },
     {
       id: 'inv-8', number: 'INV-0008', clientId: 'c-orchid', dateISO: '2026-07-01', dueDateISO: '2026-07-16',

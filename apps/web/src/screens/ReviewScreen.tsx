@@ -55,7 +55,7 @@ export default function ReviewScreen({ prefill, onSave, onCancel }: Props) {
     setError(null);
     const base = {
       vendor: vendor.trim() || null,
-      currency: 'USD',
+      currency: 'INR',
       imageDataUrl: prefill.imageDataUrl,
       ocrMode: prefill.ocrMode,
       rawText: prefill.rawText,
@@ -140,8 +140,8 @@ export default function ReviewScreen({ prefill, onSave, onCancel }: Props) {
         {category === 'bills_receipts' && (
           <>
             <Field label="Vendor (from)" value={vendor} onChangeText={setVendor} placeholder="e.g. Blue Bottle Coffee" />
-            <Field label="Total ($)" value={total} onChangeText={setTotal} placeholder="0.00" />
-            <Field label="Tax ($, optional)" value={tax} onChangeText={setTax} placeholder="0.00" />
+            <Field label="Total (₹)" value={total} onChangeText={setTotal} placeholder="0.00" />
+            <Field label="Tax (₹, optional)" value={tax} onChangeText={setTax} placeholder="0.00" />
             <Field label="Date (YYYY-MM-DD)" value={receiptDate} onChangeText={setReceiptDate} placeholder="2026-07-09" />
           </>
         )}
@@ -156,7 +156,7 @@ export default function ReviewScreen({ prefill, onSave, onCancel }: Props) {
               onChangeText={setIdentifier}
               placeholder="serial number or IMEI"
             />
-            <Field label="Purchase price ($)" value={purchasePrice} onChangeText={setPurchasePrice} placeholder="0.00" />
+            <Field label="Purchase price (₹)" value={purchasePrice} onChangeText={setPurchasePrice} placeholder="0.00" />
             <Field label="Warranty length (months)" value={warrantyMonths} onChangeText={setWarrantyMonths} placeholder="12" />
           </>
         )}

@@ -9,7 +9,7 @@ import {
   guessCategory,
 } from '@domain/ocr/fieldparser';
 import type { DocumentCategory } from '@domain/ocr/fieldparser';
-import { formatAmount } from '@domain/money';
+import { formatINR } from '@domain/money';
 import { CATEGORY_LABEL, COLORS } from '../theme';
 import { Card, Icon, IconChip, SectionLabel, categoryVisual } from '../components/ui';
 import type { WebDocument, WebGroup } from '../store';
@@ -206,7 +206,7 @@ export default function DocumentsScreen({
                     </Text>
                   </View>
                   <View style={styles.rowRight}>
-                    {doc.totalCents != null ? <Text style={styles.rowAmount}>${formatAmount(doc.totalCents)}</Text> : null}
+                    {doc.totalCents != null ? <Text style={styles.rowAmount}>{formatINR(doc.totalCents)}</Text> : null}
                     {doc.category === 'bills_receipts' && doc.totalCents != null ? (
                       <Pressable onPress={() => setSplitDoc(doc)} style={styles.splitBtn}>
                         <Text style={styles.splitLink}>Split</Text>
@@ -225,7 +225,7 @@ export default function DocumentsScreen({
           <View style={styles.sheet}>
             <Text style={styles.sheetTitle}>
               Split {splitDoc.vendor}
-              {splitDoc.totalCents != null ? ` · $${formatAmount(splitDoc.totalCents)}` : ''}
+              {splitDoc.totalCents != null ? ` · ${formatINR(splitDoc.totalCents)}` : ''}
             </Text>
             <Text style={styles.sheetSub}>Add this expense to a group and split it there:</Text>
             {groups.length === 0 ? (
@@ -270,8 +270,8 @@ export default function DocumentsScreen({
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.screenBg },
   scroll: { padding: 16, paddingBottom: 16 },
-  banner: { backgroundColor: '#eef6ff', borderWidth: 1, borderColor: '#dbeafe', borderRadius: 12, padding: 12, marginBottom: 14 },
-  bannerText: { color: '#1e40af', fontSize: 13, lineHeight: 18 },
+  banner: { backgroundColor: COLORS.accentSoft, borderWidth: 1, borderColor: COLORS.accentSoft, borderRadius: 12, padding: 12, marginBottom: 14 },
+  bannerText: { color: COLORS.primaryDark, fontSize: 13, lineHeight: 18 },
   panel: { backgroundColor: '#fff', borderWidth: 1, borderColor: COLORS.border, borderRadius: 16, padding: 14, marginBottom: 8 },
   busy: { alignItems: 'center', paddingVertical: 18, gap: 8 },
   busyText: { color: COLORS.text, fontWeight: '600' },
