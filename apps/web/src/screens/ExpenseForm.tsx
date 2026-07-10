@@ -11,6 +11,8 @@ interface Props {
   group: WebGroup;
   receiptDocs: WebDocument[];
   initial?: WebExpense | null;
+  /** When adding, seed the form from this Bills & Receipts document. */
+  prefillReceipt?: WebDocument | null;
   onSubmit: (data: ExpenseFormData) => void;
   onCancel: () => void;
 }
@@ -27,13 +29,21 @@ function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export default function ExpenseForm({ group, receiptDocs, initial, onSubmit, onCancel }: Props) {
-  const [description, setDescription] = useState(initial?.description ?? '');
-  const [category, setCategory] = useState(initial?.category ?? 'General');
-  const [dateISO, setDateISO] = useState(initial?.dateISO ?? todayISO());
+export default function ExpenseForm({ group, receiptDocs, initial, prefillReceipt, onSubmit, onCancel }: Props) {
+  const [description, setDescription] = useState(initial?.description ?? prefillReceipt?.vendor ?? '');
+  const [category, setCategory] = useState(initial?.category ?? (prefillReceipt ? 'Groceries' : 'General'));
+  const [dateISO, setDateISO] = useState(initial?.dateISO ?? prefillReceipt?.dateISO ?? todayISO());
   const [notes, setNotes] = useState(initial?.notes ?? '');
-  const [total, setTotal] = useState(initial ? fromCents(initial.totalCents).toFixed(2) : '');
-  const [sourceDocumentId, setSourceDocumentId] = useState<string | null>(initial?.sourceDocumentId ?? null);
+  const [total, setTotal] = useState(
+    initial
+      ? fromCents(initial.totalCents).toFixed(2)
+      : prefillReceipt?.totalCents != null
+      ? fromCents(prefillReceipt.totalCents).toFixed(2)
+      : '',
+  );
+  const [sourceDocumentId, setSourceDocumentId] = useState<string | null>(
+    initial?.sourceDocumentId ?? prefillReceipt?.id ?? null,
+  );
 
   const [involved, setInvolved] = useState<Set<string>>(
     new Set(initial?.involvedIds ?? group.members.map((m) => m.id)),
@@ -144,7 +154,16 @@ export default function ExpenseForm({ group, receiptDocs, initial, onSubmit, onC
 
   return (
     <ScrollView style={styles.wrap} contentContainerStyle={{ paddingBottom: 8 }}>
-      {receiptDocs.length > 0 && !initial && (
+      {prefillReceipt && !initial && (
+        <View style={styles.fromReceipt}>
+          <Text style={styles.fromReceiptText}>
+            📎 Splitting from receipt: {prefillReceipt.vendor}
+            {prefillReceipt.totalCents != null ? ` · $${formatAmount(prefillReceipt.totalCents)}` : ''}
+          </Text>
+        </View>
+      )}
+
+      {receiptDocs.length > 0 && !initial && !prefillReceipt && (
         <>
           <Text style={styles.label}>Split from a receipt (optional)</Text>
           <View style={styles.chips}>
@@ -277,6 +296,8 @@ export default function ExpenseForm({ group, receiptDocs, initial, onSubmit, onC
 
 const styles = StyleSheet.create({
   wrap: { backgroundColor: COLORS.screenBg, borderRadius: 12, padding: 12, marginBottom: 12 },
+  fromReceipt: { backgroundColor: '#eef6ff', borderRadius: 8, padding: 10, marginBottom: 4 },
+  fromReceiptText: { color: '#1e40af', fontSize: 13, fontWeight: '600' },
   label: { fontSize: 13, fontWeight: '600', color: COLORS.subtext, marginTop: 10, marginBottom: 6 },
   input: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 9, fontSize: 15, color: COLORS.text, backgroundColor: '#fff' },
   rowTwo: { flexDirection: 'row', gap: 10 },

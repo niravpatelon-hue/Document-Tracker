@@ -45,7 +45,7 @@ type Route =
   | { name: 'analytics' }
   | { name: 'tracked' }
   | { name: 'groups' }
-  | { name: 'group'; groupId: string };
+  | { name: 'group'; groupId: string; prefillDocId?: string };
 
 const TITLES: Record<Route['name'], string> = {
   documents: 'Documents',
@@ -110,10 +110,12 @@ export default function App() {
         return (
           <DocumentsScreen
             documents={documents}
+            groups={groups}
             onReview={(prefill) => navigate({ name: 'review', prefill })}
             onOpenAnalytics={() => navigate({ name: 'analytics' })}
             onOpenTracked={() => navigate({ name: 'tracked' })}
             onOpenGroups={() => navigate({ name: 'groups' })}
+            onSplitToGroup={(groupId, docId) => navigate({ name: 'group', groupId, prefillDocId: docId })}
           />
         );
       case 'review':
@@ -158,12 +160,16 @@ export default function App() {
         if (!group) {
           return <View style={styles.content} />;
         }
+        const prefillReceipt = route.prefillDocId
+          ? documents.find((d) => d.id === route.prefillDocId) ?? null
+          : null;
         return (
           <GroupDetailScreen
             group={group}
             expenses={expenses.filter((e) => e.groupId === group.id)}
             settlements={settlements.filter((s) => s.groupId === group.id)}
             receiptDocs={documents.filter((d) => d.category === 'bills_receipts' && d.totalCents != null)}
+            prefillReceipt={prefillReceipt}
             onAddExpense={(e) =>
               setExpenses((prev) => [{ ...e, id: newId(), createdAt: Date.now() }, ...prev])
             }

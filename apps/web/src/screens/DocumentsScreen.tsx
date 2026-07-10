@@ -10,17 +10,19 @@ import {
 } from '@domain/ocr/fieldparser';
 import { formatAmount } from '@domain/money';
 import { CATEGORY_LABEL, COLORS } from '../theme';
-import type { WebDocument } from '../store';
+import type { WebDocument, WebGroup } from '../store';
 import { SAMPLE_RECEIPT_TEXT } from '../seed';
 import { extractTextFromFile } from '../extract';
 import type { ReviewPrefill } from '../App';
 
 interface Props {
   documents: WebDocument[];
+  groups: WebGroup[];
   onReview: (prefill: ReviewPrefill) => void;
   onOpenAnalytics: () => void;
   onOpenTracked: () => void;
   onOpenGroups: () => void;
+  onSplitToGroup: (groupId: string, docId: string) => void;
 }
 
 /** Build the Review pre-fill by running the real domain categorizer + parsers on OCR text. */
@@ -65,10 +67,12 @@ function FileInput({ onPick, disabled }: { onPick: (file: File) => void; disable
 
 export default function DocumentsScreen({
   documents,
+  groups,
   onReview,
   onOpenAnalytics,
   onOpenTracked,
   onOpenGroups,
+  onSplitToGroup,
 }: Props) {
   const [scanning, setScanning] = useState(false);
   const [text, setText] = useState('');
@@ -76,6 +80,7 @@ export default function DocumentsScreen({
   const [status, setStatus] = useState('');
   const [pct, setPct] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [splitDoc, setSplitDoc] = useState<WebDocument | null>(null);
 
   function reset() {
     setScanning(false);
@@ -183,13 +188,64 @@ export default function DocumentsScreen({
                   {doc.ocrMode === 'cloud' ? 'Cloud OCR' : doc.ocrMode === 'manual' ? 'Manual' : 'On-device OCR'}
                 </Text>
               </View>
-              {doc.totalCents != null ? (
-                <Text style={styles.rowAmount}>${formatAmount(doc.totalCents)}</Text>
-              ) : null}
+              <View style={styles.rowRight}>
+                {doc.totalCents != null ? (
+                  <Text style={styles.rowAmount}>${formatAmount(doc.totalCents)}</Text>
+                ) : null}
+                {doc.category === 'bills_receipts' && doc.totalCents != null ? (
+                  <Pressable onPress={() => setSplitDoc(doc)} style={styles.splitBtn}>
+                    <Text style={styles.splitLink}>Split</Text>
+                  </Pressable>
+                ) : null}
+              </View>
             </View>
           ))
         )}
       </ScrollView>
+
+      {splitDoc ? (
+        <View style={styles.overlay}>
+          <View style={styles.sheet}>
+            <Text style={styles.sheetTitle}>
+              Split {splitDoc.vendor}
+              {splitDoc.totalCents != null ? ` · $${formatAmount(splitDoc.totalCents)}` : ''}
+            </Text>
+            <Text style={styles.sheetSub}>Add this expense to a group and split it there:</Text>
+            {groups.length === 0 ? (
+              <>
+                <Text style={styles.sheetEmpty}>You don't have any groups yet.</Text>
+                <Pressable
+                  style={styles.sheetPrimary}
+                  onPress={() => {
+                    setSplitDoc(null);
+                    onOpenGroups();
+                  }}
+                >
+                  <Text style={styles.sheetPrimaryText}>Create a group first</Text>
+                </Pressable>
+              </>
+            ) : (
+              groups.map((g) => (
+                <Pressable
+                  key={g.id}
+                  style={styles.groupPick}
+                  onPress={() => {
+                    const id = splitDoc.id;
+                    setSplitDoc(null);
+                    onSplitToGroup(g.id, id);
+                  }}
+                >
+                  <Text style={styles.groupPickName}>{g.name}</Text>
+                  <Text style={styles.groupPickMeta}>{g.members.length} members ›</Text>
+                </Pressable>
+              ))
+            )}
+            <Pressable onPress={() => setSplitDoc(null)}>
+              <Text style={styles.sheetCancel}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
 
       <View style={styles.footer}>
         <Pressable style={styles.secondary} onPress={onOpenAnalytics}>
@@ -246,7 +302,40 @@ const styles = StyleSheet.create({
   rowLeft: { flex: 1, paddingRight: 8 },
   rowTitle: { fontSize: 16, fontWeight: '600', color: COLORS.text },
   rowSub: { fontSize: 12, color: COLORS.subtext, marginTop: 2 },
+  rowRight: { alignItems: 'flex-end' },
   rowAmount: { fontSize: 16, fontWeight: '700', color: COLORS.text },
+  splitBtn: { marginTop: 4 },
+  splitLink: { fontSize: 13, fontWeight: '700', color: COLORS.primary },
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(17,24,39,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  sheet: { width: '100%', backgroundColor: COLORS.bg, borderRadius: 16, padding: 18 },
+  sheetTitle: { fontSize: 17, fontWeight: '800', color: COLORS.text },
+  sheetSub: { fontSize: 13, color: COLORS.subtext, marginTop: 4, marginBottom: 10 },
+  sheetEmpty: { color: COLORS.subtext, marginBottom: 10 },
+  groupPick: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 13,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: COLORS.screenBg,
+    marginBottom: 8,
+  },
+  groupPickName: { fontSize: 15, fontWeight: '700', color: COLORS.text },
+  groupPickMeta: { fontSize: 12, color: COLORS.subtext },
+  sheetPrimary: { backgroundColor: COLORS.primary, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  sheetPrimaryText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  sheetCancel: { color: COLORS.subtext, textAlign: 'center', marginTop: 10, fontSize: 15 },
   footer: { flexDirection: 'row', gap: 12, padding: 12, borderTopWidth: 1, borderTopColor: COLORS.border },
   secondary: { flex: 1, backgroundColor: COLORS.chip, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
   secondaryText: { color: COLORS.text, fontWeight: '600', fontSize: 15 },

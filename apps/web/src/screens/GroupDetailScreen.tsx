@@ -12,6 +12,8 @@ interface Props {
   expenses: WebExpense[];
   settlements: WebSettlement[];
   receiptDocs: WebDocument[];
+  /** When navigated here to split a specific receipt, open the add form seeded from it. */
+  prefillReceipt?: WebDocument | null;
   onAddExpense: (e: ExpenseFormData) => void;
   onUpdateExpense: (id: string, patch: ExpenseFormData) => void;
   onDeleteExpense: (id: string) => void;
@@ -23,6 +25,7 @@ export default function GroupDetailScreen({
   expenses,
   settlements,
   receiptDocs,
+  prefillReceipt,
   onAddExpense,
   onUpdateExpense,
   onDeleteExpense,
@@ -50,7 +53,10 @@ export default function GroupDetailScreen({
 
   const youNet = balances.find((b) => b.userId === 'u_you')?.net ?? 0;
 
-  const [mode, setMode] = useState<'view' | 'add' | 'edit'>('view');
+  const [mode, setMode] = useState<'view' | 'add' | 'edit'>(prefillReceipt ? 'add' : 'view');
+  // The receipt prefill is one-shot: consumed by the auto-opened add form, then
+  // cleared so a later manual "+ Add expense" starts blank.
+  const [pendingPrefill, setPendingPrefill] = useState<WebDocument | null>(prefillReceipt ?? null);
   const [editId, setEditId] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [settleOpen, setSettleOpen] = useState(false);
@@ -74,6 +80,7 @@ export default function GroupDetailScreen({
           group={group}
           receiptDocs={receiptDocs}
           initial={initial}
+          prefillReceipt={mode === 'add' ? pendingPrefill : null}
           onSubmit={(data) => {
             if (mode === 'edit' && editId) {
               onUpdateExpense(editId, data);
@@ -82,10 +89,12 @@ export default function GroupDetailScreen({
             }
             setMode('view');
             setEditId(null);
+            setPendingPrefill(null);
           }}
           onCancel={() => {
             setMode('view');
             setEditId(null);
+            setPendingPrefill(null);
           }}
         />
       </ScrollView>
