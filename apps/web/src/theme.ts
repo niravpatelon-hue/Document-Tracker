@@ -1,48 +1,43 @@
+/**
+ * "Friendly & rounded" design tokens — a warm, social, Splitwise-leaning look.
+ * Teal-green primary, soft neutrals, orange for "you owe" and green for
+ * "you are owed". Amounts are stored as integer paise; currency is INR.
+ */
 export const COLORS = {
-  bg: '#ffffff',
-  screenBg: '#f5f7fb',
-  // Brand blues (varied tones)
-  primary: '#1d4ed8',
-  primaryDark: '#1e3a8a',
-  primaryMid: '#3b82f6',
-  sky: '#60a5fa',
-  accentSoft: '#dbeafe',
-  // Neutrals
-  text: '#0f172a',
-  subtext: '#64748b',
-  border: '#e7ebf2',
-  chip: '#eef1f5',
-  // Semantic
-  danger: '#b42318',
-  success: '#059669',
-  warnBg: '#fef0e0',
-  warnText: '#b45309',
-  // Fintech direction tokens
-  navyA: '#14213d',
-  navyB: '#0b1220',
-  good: '#059669',
-  warn: '#b45309',
-  info: '#2563eb',
-  // Chart / summary series (income green, expense orange, savings amber)
-  income: '#16a34a',
-  incomeSoft: '#dcfce7',
-  expense: '#f97316',
-  expenseSoft: '#ffedd5',
-  savings: '#eab308',
-  savingsSoft: '#fef9c3',
-  // Credit-card gradient (blue) + progress track
-  cardA: '#2563eb',
-  cardB: '#1e3a8a',
-  track: '#eaf0f9',
+  // Brand
+  primary: '#1CC29F',
+  primaryDark: '#159C80',
+  primarySoft: '#E4F7F2',
+  // Text / neutrals
+  ink: '#1B2733',
+  text: '#1B2733',
+  subtext: '#6B7C8F',
+  muted: '#9AA8B4',
+  border: '#E9EEF1',
+  divider: '#F0F3F5',
+  screenBg: '#F5F7F8',
+  bg: '#FFFFFF',
+  card: '#FFFFFF',
+  chip: '#EEF3F4',
+  // Balance semantics
+  owe: '#FF652F',
+  oweSoft: '#FFE9E0',
+  owed: '#1CC29F',
+  owedSoft: '#E4F7F2',
+  // Status
+  danger: '#E5484D',
+  warn: '#F5A623',
+  warnSoft: '#FFF3DE',
+  success: '#1CC29F',
+  info: '#3B82F6',
+  star: '#FFB800',
 };
 
-export const CATEGORY_LABEL: Record<string, string> = {
-  bills_receipts: 'Bill / Receipt',
-  warranty: 'Warranty',
-  loyalty: 'Loyalty / Gift card',
-  other: 'Other',
-};
+/** Distinct, friendly avatar / accent colors (assigned by index or hash). */
+export const AVATAR_COLORS = [
+  '#1CC29F', '#5B8DEF', '#FF652F', '#F5A623', '#9B59F6',
+  '#EF5DA8', '#2DBFA8', '#F4655B', '#6C7BFF', '#00A8A8',
+];
 
-/** App-wide currency for the Indian market. Amounts are stored as integer paise. */
 export const CURRENCY = 'INR';
 export const CURRENCY_SYMBOL = '₹';

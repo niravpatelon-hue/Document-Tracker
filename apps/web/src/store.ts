@@ -1,208 +1,95 @@
 /**
- * Web-preview data store. This is a lightweight in-browser stand-in for the
- * app's WatermelonDB layer (no SQLite in the browser), but the interesting logic
- * — the duplicate fuzzy key and duplicate detection — is imported straight from
- * the app's real, tested domain layer (@domain). So the preview isn't faking the
- * behaviour; it runs the same code.
+ * Web-preview data store (v2) for the expense + splitting app.
+ *
+ * ONE unified `Expense` entity powers both the personal ledger (easy-expense)
+ * and group splitting (Splitwise): a personal expense simply has groupId=null,
+ * a single payer (ME) and a single allocation (ME owes the whole amount). A
+ * shared expense has a groupId and a real multi-payer split. Scanned receipts
+ * become Expenses directly (source='scan'), so the same object flows from the
+ * AI scan straight into splitting.
+ *
+ * Money is integer paise. Split math / balances come from the tested domain
+ * layer (@domain/splitting, @domain/settleup) — the preview runs the real code.
  */
-import { buildFuzzyKey, isLikelyDuplicatePurchase } from '@domain/dedup/fuzzy';
-import type { DocumentCategory } from '@domain/ocr/fieldparser';
 import type { SplitType } from '@domain/splitting';
+import type { SpendTxn } from '@domain/analytics/spend';
+import { AVATAR_COLORS } from './theme';
 
-export type OcrMode = 'on_device' | 'cloud' | 'manual';
+export type { SplitType };
 
-export type DocDetails = Record<string, string | number | null>;
+/** The signed-in user's own id inside every group's member list. */
+export const ME = 'me';
 
-export interface WebDocument {
-  id: string;
-  createdAt: number;
-  category: DocumentCategory;
-  vendor: string | null;
-  totalCents: number | null;
-  taxCents: number | null;
-  currency: string;
-  dateISO: string | null;
-  imageDataUrl: string | null;
-  ocrMode: OcrMode;
-  rawText: string;
-  fuzzyDupKey: string | null;
-  /** Display name for non-receipt categories (product / issuer). */
-  label: string | null;
-  /** Category-specific fields (warranty identifier/duration, loyalty balance…). */
-  details: DocDetails;
-}
-
-export interface WebTransaction {
-  id: string;
-  documentId: string;
-  amount: number;
-  vendor: string;
-  dateISO: string;
-}
-
-/** A money-in event (salary, freelance credit, refund…) in paise. Personal mode. */
-export interface WebIncome {
-  id: string;
-  source: string;
-  amountCents: number;
-  dateISO: string;
-  /** How much of this inflow was moved to savings (paise). */
-  savedCents?: number;
-}
-
-export interface CreateDocInput {
-  category: DocumentCategory;
-  vendor: string | null;
-  totalCents: number | null;
-  taxCents: number | null;
-  currency: string;
-  dateISO: string | null;
-  imageDataUrl: string | null;
-  ocrMode: OcrMode;
-  rawText: string;
-  label?: string | null;
-  details?: DocDetails;
-}
-
-export interface WebBudget {
-  id: string;
-  category: string;
-  period: 'monthly' | 'yearly';
-  limitCents: number;
-  alertThresholdPct: number;
-}
-
-export interface WebGroupMember {
+export interface Member {
   id: string;
   name: string;
-  venmo?: string;
-  /** UPI VPA (id@bank) for UPI settle-up deep links. */
+  /** UPI VPA (id@bank) for settle-up deep links. */
   upi?: string;
+  color?: string;
 }
 
-export type AppMode = 'personal' | 'business';
+export type GroupType = 'trip' | 'home' | 'couple' | 'friends' | 'other';
 
-export interface WebUser {
+export interface Group {
+  id: string;
   name: string;
-  email: string;
-  /** Which experience the app shows. Defaults to 'personal'. */
-  mode?: AppMode;
+  emoji?: string;
+  type: GroupType;
+  members: Member[];
+  createdAt: number;
 }
 
-/** The signed-in user's own business identity (for invoices / GST). */
-export interface BusinessProfile {
-  name: string;
-  gstin: string;
-  stateName?: string;
-}
-
-export interface ExpensePayer {
+export interface Payment {
   userId: string;
   cents: number;
 }
 
-export interface WebExpense {
+export interface Allocation {
+  userId: string;
+  cents: number;
+}
+
+export type ExpenseSource = 'scan' | 'manual';
+
+export interface Expense {
   id: string;
-  groupId: string;
-  description: string;
-  category: string;
-  dateISO: string;
-  notes?: string;
-  /** Who fronted the money (one or many payers). */
-  payers: ExpensePayer[];
-  /** Which members share this expense. */
-  involvedIds: string[];
-  totalCents: number;
-  splitType: SplitType;
-  allocations: { userId: string; cents: number }[];
-  sourceDocumentId?: string | null;
   createdAt: number;
+  /** Merchant / title. */
+  description: string;
+  amountCents: number;
+  currency: string;
+  dateISO: string;
+  category: string;
+  notes?: string;
+  source: ExpenseSource;
+  imageDataUrl?: string | null;
+  rawText?: string | null;
+  taxCents?: number | null;
+  /** null => a personal expense; otherwise the group it is shared in. */
+  groupId: string | null;
+  /** Who paid, and how much (supports multiple payers). */
+  paidBy: Payment[];
+  /** Members who share this expense. */
+  involvedIds: string[];
+  splitType: SplitType;
+  /** Who owes what — sums to amountCents (from @domain/splitting computeSplit). */
+  allocations: Allocation[];
 }
 
-export interface WebGroup {
-  id: string;
-  name: string;
-  type: 'trip' | 'household' | 'event' | 'other';
-  members: WebGroupMember[];
-}
-
-export interface WebSettlement {
+export interface Settlement {
   id: string;
   groupId: string;
   fromUser: string;
   toUser: string;
-  amount: number;
+  amountCents: number;
   note?: string;
   createdAt: number;
 }
 
-/** Expense categories, Splitwise-style, with a simple emoji per category. */
-export const EXPENSE_CATEGORIES: { key: string; icon: string }[] = [
-  { key: 'General', icon: '🧾' },
-  { key: 'Food & drink', icon: '🍽️' },
-  { key: 'Groceries', icon: '🛒' },
-  { key: 'Travel', icon: '✈️' },
-  { key: 'Lodging', icon: '🏠' },
-  { key: 'Transport', icon: '🚗' },
-  { key: 'Entertainment', icon: '🎉' },
-  { key: 'Utilities', icon: '💡' },
-  { key: 'Shopping', icon: '🛍️' },
-];
-
-export function categoryIcon(key: string): string {
-  return EXPENSE_CATEGORIES.find((c) => c.key === key)?.icon ?? '🧾';
-}
-
-/* -------------------------------------------------------------------------- */
-/*  Business mode entities (GST, invoicing, clients, mileage, expenses)        */
-/* -------------------------------------------------------------------------- */
-
-/** GST slabs used across India. */
-export const GST_RATES = [0, 5, 12, 18, 28] as const;
-export type GstRate = (typeof GST_RATES)[number];
-
-/** input = purchases (eligible for input-tax credit); output = sales. */
-export type GstDirection = 'input' | 'output';
-
-export interface WebClient {
-  id: string;
-  name: string;
-  gstin?: string;
-  email?: string;
-  phone?: string;
-  stateName?: string;
-  createdAt: number;
-}
-
-export interface WebInvoiceItem {
-  description: string;
-  qty: number;
-  /** Per-unit rate in paise (minor units). */
-  rateCents: number;
-  /** GST rate applied to this line, e.g. 18. */
-  taxRatePct: number;
-  hsn?: string;
-}
-
-export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue';
-
-export interface WebInvoice {
-  id: string;
-  number: string;
-  clientId: string;
-  dateISO: string;
-  dueDateISO: string;
-  items: WebInvoiceItem[];
-  status: InvoiceStatus;
-  notes?: string;
-  createdAt: number;
-}
-
-export interface WebMileageTrip {
+export interface MileageTrip {
   id: string;
   dateISO: string;
   purpose: string;
-  /** Free-text "from → to" description. */
   route: string;
   km: number;
   /** Reimbursement rate in paise per km (e.g. 1200 = ₹12/km). */
@@ -210,60 +97,77 @@ export interface WebMileageTrip {
   createdAt: number;
 }
 
-/** A business expense (purchase) with GST tracked for input-tax credit. */
-export interface WebBusinessExpense {
+export interface Budget {
   id: string;
-  vendor: string;
   category: string;
-  dateISO: string;
-  /** Net / taxable amount in paise (before GST). */
-  amountCents: number;
-  taxRatePct: number;
-  /** Computed GST amount in paise. */
-  gstCents: number;
-  direction: GstDirection;
-  gstin?: string;
-  paymentMethod?: string;
-  notes?: string;
-  imageDataUrl?: string | null;
-  createdAt: number;
+  period: 'monthly' | 'yearly';
+  limitCents: number;
+  alertThresholdPct: number;
 }
 
-/** Business-expense categories (deductible-leaning), with an emoji each. */
-export const BUSINESS_EXPENSE_CATEGORIES: { key: string; icon: string }[] = [
-  { key: 'Office supplies', icon: '🖇️' },
-  { key: 'Software & SaaS', icon: '💻' },
-  { key: 'Travel', icon: '✈️' },
-  { key: 'Meals & entertainment', icon: '🍽️' },
-  { key: 'Rent & utilities', icon: '🏢' },
-  { key: 'Marketing', icon: '📣' },
-  { key: 'Professional fees', icon: '📑' },
-  { key: 'Equipment', icon: '🖨️' },
-  { key: 'Telecom & internet', icon: '📶' },
-  { key: 'Other', icon: '🧾' },
+export interface WebUser {
+  name: string;
+  email: string;
+}
+
+/** Spend categories (aligned with @domain classifySpendCategory outputs) + tints. */
+export const EXPENSE_CATEGORIES: { key: string; icon: string; color: string }[] = [
+  { key: 'General', icon: '🧾', color: '#6B7C8F' },
+  { key: 'Dining', icon: '🍽️', color: '#FF652F' },
+  { key: 'Groceries', icon: '🛒', color: '#1CC29F' },
+  { key: 'Transport', icon: '🚗', color: '#5B8DEF' },
+  { key: 'Fuel', icon: '⛽', color: '#F5A623' },
+  { key: 'Rent', icon: '🏠', color: '#9B59F6' },
+  { key: 'Bills', icon: '💳', color: '#EF5DA8' },
+  { key: 'Utilities', icon: '💡', color: '#F5A623' },
+  { key: 'Entertainment', icon: '🎬', color: '#9B59F6' },
+  { key: 'Shopping', icon: '🛍️', color: '#EF5DA8' },
+  { key: 'Travel', icon: '✈️', color: '#5B8DEF' },
+  { key: 'Health', icon: '🩺', color: '#2DBFA8' },
+  { key: 'Other', icon: '📦', color: '#9AA8B4' },
 ];
 
-export function businessCategoryIcon(key: string): string {
-  return BUSINESS_EXPENSE_CATEGORIES.find((c) => c.key === key)?.icon ?? '🧾';
+export function categoryIcon(key: string): string {
+  return EXPENSE_CATEGORIES.find((c) => c.key === key)?.icon ?? '🧾';
+}
+
+export function categoryColor(key: string): string {
+  return EXPENSE_CATEGORIES.find((c) => c.key === key)?.color ?? '#6B7C8F';
+}
+
+/** Stable friendly color for a member/name. */
+export function colorForId(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length]!;
+}
+
+/** The current user's own share of an expense (0 if not involved). */
+export function myShareCents(e: Expense): number {
+  return e.allocations.find((a) => a.userId === ME)?.cents ?? 0;
+}
+
+/** Net the current user is owed (+) or owes (−) for one expense. */
+export function myNetForExpense(e: Expense): number {
+  const paid = e.paidBy.filter((p) => p.userId === ME).reduce((s, p) => s + p.cents, 0);
+  return paid - myShareCents(e);
+}
+
+/** Map an expense to a SpendTxn for analytics, using the current user's own share. */
+export function expenseToSpendTxn(e: Expense): SpendTxn {
+  return { amount: myShareCents(e), category: e.category, dateISO: e.dateISO, vendor: e.description };
 }
 
 export interface PersistedState {
-  documents: WebDocument[];
-  transactions: WebTransaction[];
-  incomes: WebIncome[];
-  budgets: WebBudget[];
-  groups: WebGroup[];
-  expenses: WebExpense[];
-  settlements: WebSettlement[];
-  // Business mode
-  businessProfile: BusinessProfile;
-  clients: WebClient[];
-  invoices: WebInvoice[];
-  mileage: WebMileageTrip[];
-  businessExpenses: WebBusinessExpense[];
+  expenses: Expense[];
+  groups: Group[];
+  settlements: Settlement[];
+  mileage: MileageTrip[];
+  budgets: Budget[];
 }
 
-const STORAGE_KEY = 'document-tracker-preview-v1';
+const STORAGE_KEY = 'expense-split-app-v2';
+const USER_KEY = 'expense-split-user-v1';
 
 export function newId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -272,150 +176,51 @@ export function newId(): string {
   return `id-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 }
 
-function isReceipt(input: { category: DocumentCategory }): boolean {
-  return input.category === 'bills_receipts';
-}
-
-/** Build a document (+ ledger transaction when it's a completed receipt). */
-export function buildDocument(input: CreateDocInput): {
-  doc: WebDocument;
-  txn: WebTransaction | null;
-} {
-  const id = newId();
-  const receipt = isReceipt(input);
-  const fuzzyDupKey =
-    receipt && input.vendor && input.dateISO && input.totalCents != null
-      ? buildFuzzyKey(input.vendor, input.dateISO, input.totalCents)
-      : null;
-
-  const doc: WebDocument = {
-    id,
-    createdAt: Date.now(),
-    ...input,
-    label: input.label ?? null,
-    details: input.details ?? {},
-    fuzzyDupKey,
-  };
-
-  let txn: WebTransaction | null = null;
-  if (receipt && input.totalCents != null && input.vendor && input.dateISO) {
-    txn = {
-      id: newId(),
-      documentId: id,
-      amount: input.totalCents,
-      vendor: input.vendor,
-      dateISO: input.dateISO,
-    };
-  }
-  return { doc, txn };
-}
-
-/** Advisory same-purchase duplicate check, using the real domain matcher. */
-export function findDuplicates(input: CreateDocInput, docs: WebDocument[]): WebDocument[] {
-  if (!(isReceipt(input) && input.vendor && input.dateISO && input.totalCents != null)) {
-    return [];
-  }
-  const hits: WebDocument[] = [];
-  for (const d of docs) {
-    if (!d.fuzzyDupKey) {
-      continue;
-    }
-    const [vendor, dateISO, amount] = d.fuzzyDupKey.split('|');
-    const verdict = isLikelyDuplicatePurchase(
-      { vendor: input.vendor, dateISO: input.dateISO, amount: input.totalCents },
-      { vendor: vendor ?? '', dateISO: dateISO ?? '', amount: Number(amount ?? 0) },
-    );
-    if (verdict.isLikely) {
-      hits.push(d);
-    }
-  }
-  return hits;
+export function emptyState(): PersistedState {
+  return { expenses: [], groups: [], settlements: [], mileage: [], budgets: [] };
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-/**
- * Coerce a persisted expense (possibly from an older app version) into the
- * current shape. Critically, older expenses stored a single `payerId` instead
- * of a `payers` array — reading `.payers` on those threw and blanked the page,
- * so we derive it here. Everything else is backfilled with safe defaults.
- */
-function migrateExpense(e: any, i: number): WebExpense {
-  const totalCents = Number(e?.totalCents) || 0;
-  const allocations = Array.isArray(e?.allocations)
+function migrateExpense(e: any, i: number): Expense {
+  const amountCents = Number(e?.amountCents) || 0;
+  const allocations: Allocation[] = Array.isArray(e?.allocations)
     ? e.allocations.map((a: any) => ({ userId: String(a?.userId), cents: Number(a?.cents) || 0 }))
-    : [];
-  const payers =
-    Array.isArray(e?.payers) && e.payers.length > 0
-      ? e.payers.map((p: any) => ({ userId: String(p?.userId), cents: Number(p?.cents) || 0 }))
-      : e?.payerId
-      ? [{ userId: String(e.payerId), cents: totalCents }]
-      : [];
-  const involvedIds =
-    Array.isArray(e?.involvedIds) && e.involvedIds.length > 0
-      ? e.involvedIds.map(String)
-      : allocations.map((a: { userId: string }) => a.userId);
+    : [{ userId: ME, cents: amountCents }];
+  const paidBy: Payment[] = Array.isArray(e?.paidBy) && e.paidBy.length > 0
+    ? e.paidBy.map((p: any) => ({ userId: String(p?.userId), cents: Number(p?.cents) || 0 }))
+    : [{ userId: ME, cents: amountCents }];
+  const involvedIds: string[] = Array.isArray(e?.involvedIds) && e.involvedIds.length > 0
+    ? e.involvedIds.map(String)
+    : allocations.map((a) => a.userId);
   return {
-    id: String(e?.id ?? `mig-e-${i}`),
-    groupId: String(e?.groupId ?? ''),
+    id: String(e?.id ?? `mig-${i}`),
+    createdAt: Number(e?.createdAt) || Date.now() - i * 1000,
     description: String(e?.description ?? 'Expense'),
+    amountCents,
+    currency: String(e?.currency ?? 'INR'),
+    dateISO: typeof e?.dateISO === 'string' ? e.dateISO : new Date().toISOString().slice(0, 10),
     category: String(e?.category ?? 'General'),
-    dateISO: typeof e?.dateISO === 'string' ? e.dateISO : '',
     notes: e?.notes ? String(e.notes) : undefined,
-    payers,
+    source: e?.source === 'scan' ? 'scan' : 'manual',
+    imageDataUrl: e?.imageDataUrl ?? null,
+    rawText: e?.rawText ?? null,
+    taxCents: e?.taxCents != null ? Number(e.taxCents) : null,
+    groupId: e?.groupId ?? null,
+    paidBy,
     involvedIds,
-    totalCents,
     splitType: e?.splitType ?? 'equal',
     allocations,
-    sourceDocumentId: e?.sourceDocumentId ?? null,
-    createdAt: Number(e?.createdAt) || Date.now() - i * 1000,
   };
 }
 
-function migrateSettlement(s: any, i: number): WebSettlement {
-  return {
-    id: String(s?.id ?? `mig-s-${i}`),
-    groupId: String(s?.groupId ?? ''),
-    fromUser: String(s?.fromUser ?? ''),
-    toUser: String(s?.toUser ?? ''),
-    amount: Number(s?.amount) || 0,
-    note: s?.note ? String(s.note) : undefined,
-    createdAt: Number(s?.createdAt) || Date.now() - i * 1000,
-  };
-}
-
-function migrateDocument(d: any): WebDocument {
-  return {
-    ...d,
-    pageImageUris: Array.isArray(d?.pageImageUris) ? d.pageImageUris : [],
-    pageCloudKeys: Array.isArray(d?.pageCloudKeys) ? d.pageCloudKeys : [],
-    phashPerPage: Array.isArray(d?.phashPerPage) ? d.phashPerPage : [],
-    label: d?.label ?? null,
-    details: d?.details && typeof d.details === 'object' ? d.details : {},
-    category: d?.category ?? 'other',
-  };
-}
-
-const EMPTY_BUSINESS_PROFILE: BusinessProfile = { name: '', gstin: '' };
-
-/** Normalize a raw parsed blob into a valid PersistedState (backward-compatible). */
 function normalizeState(raw: any): PersistedState {
   return {
-    documents: Array.isArray(raw?.documents) ? raw.documents.map(migrateDocument) : [],
-    transactions: Array.isArray(raw?.transactions) ? raw.transactions : [],
-    incomes: Array.isArray(raw?.incomes) ? raw.incomes : [],
-    budgets: Array.isArray(raw?.budgets) ? raw.budgets : [],
-    groups: Array.isArray(raw?.groups) ? raw.groups : [],
     expenses: Array.isArray(raw?.expenses) ? raw.expenses.map(migrateExpense) : [],
-    settlements: Array.isArray(raw?.settlements) ? raw.settlements.map(migrateSettlement) : [],
-    businessProfile:
-      raw?.businessProfile && typeof raw.businessProfile === 'object'
-        ? { name: String(raw.businessProfile.name ?? ''), gstin: String(raw.businessProfile.gstin ?? ''), stateName: raw.businessProfile.stateName ? String(raw.businessProfile.stateName) : undefined }
-        : { ...EMPTY_BUSINESS_PROFILE },
-    clients: Array.isArray(raw?.clients) ? raw.clients : [],
-    invoices: Array.isArray(raw?.invoices) ? raw.invoices : [],
+    groups: Array.isArray(raw?.groups) ? raw.groups : [],
+    settlements: Array.isArray(raw?.settlements) ? raw.settlements : [],
     mileage: Array.isArray(raw?.mileage) ? raw.mileage : [],
-    businessExpenses: Array.isArray(raw?.businessExpenses) ? raw.businessExpenses : [],
+    budgets: Array.isArray(raw?.budgets) ? raw.budgets : [],
   };
 }
 
@@ -432,20 +237,16 @@ export function saveState(state: PersistedState): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
-    // Non-fatal in a preview (e.g. storage disabled).
+    /* non-fatal in preview */
   }
 }
-
-const USER_KEY = 'document-tracker-user-v1';
 
 export function loadUser(): WebUser | null {
   try {
     const raw = localStorage.getItem(USER_KEY);
     if (!raw) return null;
     const u = JSON.parse(raw);
-    if (!u || typeof u.email !== 'string') return null;
-    const mode: AppMode = u.mode === 'business' ? 'business' : 'personal';
-    return { name: String(u.name ?? ''), email: String(u.email), mode };
+    return u && typeof u.email === 'string' ? { name: String(u.name ?? ''), email: String(u.email) } : null;
   } catch {
     return null;
   }
