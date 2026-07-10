@@ -1,14 +1,41 @@
+/**
+ * FRIENDLY & ROUNDED design system (Splitwise-leaning) for the web preview.
+ *
+ * Teal-green primary, soft neutrals, rounded pills, avatar-led rows, chunky
+ * balances. Pure react-native primitives + raw inline SVG (react-native-web
+ * renders SVG host elements). No react-dom, no external UI/icon/chart libs.
+ *
+ * Money is integer paise; amounts are formatted via @domain/money.formatINR.
+ */
 import React from 'react';
-import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type StyleProp,
+  type TextStyle,
+  type ViewStyle,
+} from 'react-native';
+import { formatINR } from '@domain/money';
 import { COLORS } from '../theme';
+import { categoryColor, categoryIcon, colorForId } from '../store';
 
-/** ---- Icons (raw inline SVG; react-native-web renders DOM host elements) ---- */
+const softShadow = {
+  boxShadow: '0 2px 10px rgba(20,40,60,0.05)',
+} as unknown as ViewStyle;
+
+/* ------------------------------------------------------------------ */
+/* Icon                                                               */
+/* ------------------------------------------------------------------ */
+
 export type IconName =
-  | 'home' | 'chart' | 'users' | 'user' | 'receipt' | 'shield' | 'star' | 'camera'
-  | 'bell' | 'chevron' | 'plus' | 'check' | 'calendar' | 'download' | 'trash'
-  | 'edit' | 'close' | 'tag' | 'wallet' | 'doc'
-  | 'arrowUp' | 'arrowDown' | 'send' | 'request' | 'more' | 'percent' | 'fileText'
-  | 'truck' | 'briefcase' | 'building' | 'filter' | 'search' | 'clock' | 'refresh' | 'mapPin';
+  | 'home' | 'list' | 'users' | 'user' | 'plus' | 'camera' | 'scan'
+  | 'check' | 'close' | 'chevron' | 'edit' | 'trash' | 'search' | 'filter'
+  | 'download' | 'receipt' | 'car' | 'calendar' | 'bell' | 'settings'
+  | 'arrowUp' | 'arrowDown' | 'split' | 'wallet' | 'star' | 'mapPin'
+  | 'sparkles' | 'x';
 
 export function Icon({
   name,
@@ -32,168 +59,117 @@ export function Icon({
     height: size,
   };
   switch (name) {
-    case 'home': return (<svg {...c}><path d="M4 11l8-7 8 7" /><path d="M6 10v9h12v-9" /></svg>);
-    case 'chart': return (<svg {...c}><path d="M4 19V9M10 19V5M16 19v-7M22 19H2" /></svg>);
-    case 'users': return (<svg {...c}><circle cx="9" cy="8" r="3" /><circle cx="17" cy="9" r="2.4" /><path d="M3 20c0-3 3-5 6-5s6 2 6 5" /></svg>);
-    case 'user': return (<svg {...c}><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></svg>);
-    case 'receipt': return (<svg {...c}><path d="M6 3h9l4 4v14l-2-1-2 1-2-1-2 1-2-1-2 1V3z" /><path d="M8 9h7M8 13h5" /></svg>);
-    case 'shield': return (<svg {...c}><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z" /></svg>);
-    case 'star': return (<svg {...c}><path d="M12 4l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4L4.2 9.7l5.4-.8z" /></svg>);
-    case 'camera': return (<svg {...c}><rect x="3" y="6" width="18" height="13" rx="2" /><circle cx="12" cy="12.5" r="3" /></svg>);
-    case 'bell': return (<svg {...c}><path d="M18 8a6 6 0 10-12 0c0 7-3 8-3 8h18s-3-1-3-8" /><path d="M13.5 21a2 2 0 01-3 0" /></svg>);
-    case 'chevron': return (<svg {...c}><path d="M9 6l6 6-6 6" /></svg>);
-    case 'plus': return (<svg {...c}><path d="M12 5v14M5 12h14" /></svg>);
-    case 'check': return (<svg {...c}><path d="M4 12l5 5L20 6" /></svg>);
-    case 'calendar': return (<svg {...c}><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 9h18M8 3v4M16 3v4" /></svg>);
-    case 'download': return (<svg {...c}><path d="M12 3v12M7 10l5 5 5-5M4 21h16" /></svg>);
-    case 'trash': return (<svg {...c}><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" /></svg>);
-    case 'edit': return (<svg {...c}><path d="M4 20h4L18 10l-4-4L4 16z" /><path d="M13 5l4 4" /></svg>);
-    case 'close': return (<svg {...c}><path d="M6 6l12 12M18 6L6 18" /></svg>);
-    case 'tag': return (<svg {...c}><path d="M3 12l9-9h7v7l-9 9z" /><circle cx="15.5" cy="8.5" r="1.4" /></svg>);
-    case 'wallet': return (<svg {...c}><rect x="3" y="6" width="18" height="13" rx="3" /><path d="M16 12h4" /></svg>);
-    case 'doc': return (<svg {...c}><path d="M7 3h7l4 4v14H7z" /><path d="M9 11h6M9 15h4" /></svg>);
-    case 'arrowUp': return (<svg {...c}><path d="M12 20V5M6 11l6-6 6 6" /></svg>);
-    case 'arrowDown': return (<svg {...c}><path d="M12 4v15M6 13l6 6 6-6" /></svg>);
-    case 'send': return (<svg {...c}><path d="M21 3L10 14M21 3l-7 18-4-7-7-4z" /></svg>);
-    case 'request': return (<svg {...c}><path d="M3 21L14 10M3 21l7-2 2-7M14 10l7-7" /></svg>);
-    case 'more': return (<svg {...c}><circle cx="5" cy="12" r="1.4" /><circle cx="12" cy="12" r="1.4" /><circle cx="19" cy="12" r="1.4" /></svg>);
-    case 'percent': return (<svg {...c}><path d="M19 5L5 19" /><circle cx="7" cy="7" r="2.2" /><circle cx="17" cy="17" r="2.2" /></svg>);
-    case 'fileText': return (<svg {...c}><path d="M7 3h7l4 4v14H7z" /><path d="M9 12h6M9 16h6M9 8h3" /></svg>);
-    case 'truck': return (<svg {...c}><path d="M3 6h11v9H3zM14 9h4l3 3v3h-7" /><circle cx="7" cy="18" r="1.8" /><circle cx="17.5" cy="18" r="1.8" /></svg>);
-    case 'briefcase': return (<svg {...c}><rect x="3" y="7" width="18" height="12" rx="2" /><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2M3 12h18" /></svg>);
-    case 'building': return (<svg {...c}><rect x="5" y="3" width="14" height="18" rx="1.5" /><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2M10 21v-3h4v3" /></svg>);
-    case 'filter': return (<svg {...c}><path d="M3 5h18l-7 8v6l-4-2v-4z" /></svg>);
-    case 'search': return (<svg {...c}><circle cx="11" cy="11" r="6" /><path d="M16 16l4 4" /></svg>);
-    case 'clock': return (<svg {...c}><circle cx="12" cy="12" r="8" /><path d="M12 8v4l3 2" /></svg>);
-    case 'refresh': return (<svg {...c}><path d="M20 11a8 8 0 10-2 5.3M20 5v6h-6" /></svg>);
-    case 'mapPin': return (<svg {...c}><path d="M12 21c5-5 7-8 7-11a7 7 0 10-14 0c0 3 2 6 7 11z" /><circle cx="12" cy="10" r="2.5" /></svg>);
-    default: return null;
+    case 'home':
+      return (<svg {...c}><path d="M4 11l8-7 8 7" /><path d="M6 10v9h12v-9" /></svg>);
+    case 'list':
+      return (<svg {...c}><path d="M8 6h13M8 12h13M8 18h13" /><circle cx="4" cy="6" r="1.1" /><circle cx="4" cy="12" r="1.1" /><circle cx="4" cy="18" r="1.1" /></svg>);
+    case 'users':
+      return (<svg {...c}><circle cx="9" cy="8" r="3" /><circle cx="17" cy="9" r="2.4" /><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" /><path d="M15.5 14.6c2.4.2 4.5 2 4.5 4.4" /></svg>);
+    case 'user':
+      return (<svg {...c}><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></svg>);
+    case 'plus':
+      return (<svg {...c}><path d="M12 5v14M5 12h14" /></svg>);
+    case 'camera':
+      return (<svg {...c}><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 011 1v9a1 1 0 01-1 1H4a1 1 0 01-1-1V9a1 1 0 011-1z" /><circle cx="12" cy="13" r="3.2" /></svg>);
+    case 'scan':
+      return (<svg {...c}><path d="M4 8V6a2 2 0 012-2h2M16 4h2a2 2 0 012 2v2M20 16v2a2 2 0 01-2 2h-2M8 20H6a2 2 0 01-2-2v-2" /><path d="M4 12h16" /></svg>);
+    case 'check':
+      return (<svg {...c}><path d="M4 12l5 5L20 6" /></svg>);
+    case 'close':
+    case 'x':
+      return (<svg {...c}><path d="M6 6l12 12M18 6L6 18" /></svg>);
+    case 'chevron':
+      return (<svg {...c}><path d="M9 6l6 6-6 6" /></svg>);
+    case 'edit':
+      return (<svg {...c}><path d="M4 20h4L18 10l-4-4L4 16z" /><path d="M13 5l4 4" /></svg>);
+    case 'trash':
+      return (<svg {...c}><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" /></svg>);
+    case 'search':
+      return (<svg {...c}><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></svg>);
+    case 'filter':
+      return (<svg {...c}><path d="M3 5h18l-7 8v5l-4 2v-7z" /></svg>);
+    case 'download':
+      return (<svg {...c}><path d="M12 3v12M7 10l5 5 5-5M4 21h16" /></svg>);
+    case 'receipt':
+      return (<svg {...c}><path d="M6 3h9l4 4v14l-2-1-2 1-2-1-2 1-2-1-2 1V3z" /><path d="M8 9h7M8 13h5" /></svg>);
+    case 'car':
+      return (<svg {...c}><path d="M3 13l2-5a2 2 0 012-1.4h8A2 2 0 0117 8l2 5" /><path d="M3 13h18v4a1 1 0 01-1 1h-1.5M5.5 18H4a1 1 0 01-1-1v-4" /><circle cx="7.5" cy="18" r="1.6" /><circle cx="16.5" cy="18" r="1.6" /></svg>);
+    case 'calendar':
+      return (<svg {...c}><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 9h18M8 3v4M16 3v4" /></svg>);
+    case 'bell':
+      return (<svg {...c}><path d="M18 8a6 6 0 10-12 0c0 7-3 8-3 8h18s-3-1-3-8" /><path d="M13.5 21a2 2 0 01-3 0" /></svg>);
+    case 'settings':
+      return (<svg {...c}><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" /></svg>);
+    case 'arrowUp':
+      return (<svg {...c}><path d="M12 20V5M6 11l6-6 6 6" /></svg>);
+    case 'arrowDown':
+      return (<svg {...c}><path d="M12 4v15M6 13l6 6 6-6" /></svg>);
+    case 'split':
+      return (<svg {...c}><path d="M4 12h4l4-6h8M4 12h4l4 6h8" /><path d="M17 3l3 3-3 3M17 15l3 3-3 3" /></svg>);
+    case 'wallet':
+      return (<svg {...c}><rect x="3" y="6" width="18" height="13" rx="3" /><path d="M3 10h13a2 2 0 012 2 2 2 0 01-2 2h-1" /><circle cx="16" cy="12.5" r="1" fill={color} stroke="none" /></svg>);
+    case 'star':
+      return (<svg {...c}><path d="M12 4l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4L4.2 9.7l5.4-.8z" /></svg>);
+    case 'mapPin':
+      return (<svg {...c}><path d="M12 21c5-5 7-8.5 7-11a7 7 0 10-14 0c0 2.5 2 6 7 11z" /><circle cx="12" cy="10" r="2.5" /></svg>);
+    case 'sparkles':
+      return (<svg {...c}><path d="M12 4l1.6 4.2L18 10l-4.4 1.8L12 16l-1.6-4.2L6 10l4.4-1.8z" /><path d="M18.5 3.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" /></svg>);
+    default:
+      return (<svg {...c}><circle cx="12" cy="12" r="9" /></svg>);
   }
 }
 
-/** ---- Category visual mapping (icon + chip colors) ---- */
-export function categoryVisual(category: string): { icon: IconName; bg: string; fg: string } {
-  switch (category) {
-    case 'bills_receipts': return { icon: 'receipt', bg: COLORS.accentSoft, fg: COLORS.primary };
-    case 'warranty': return { icon: 'shield', bg: '#fef0e0', fg: '#d97706' };
-    case 'loyalty': return { icon: 'star', bg: '#e6f6ee', fg: COLORS.good };
-    default: return { icon: 'doc', bg: COLORS.chip, fg: COLORS.subtext };
-  }
-}
+/* ------------------------------------------------------------------ */
+/* IconChip                                                           */
+/* ------------------------------------------------------------------ */
 
-/** ---- Building blocks ---- */
-export function IconChip({ name, bg, fg, size = 36 }: { name: IconName; bg: string; fg: string; size?: number }) {
-  return (
-    <View style={[ui.chip, { width: size, height: size, backgroundColor: bg }]}>
-      <Icon name={name} color={fg} size={Math.round(size * 0.5)} />
-    </View>
-  );
-}
-
-export function SectionLabel({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
-  return <Text style={[ui.section, style]}>{children}</Text>;
-}
-
-export function Card({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
-  return <View style={[ui.card, style]}>{children}</View>;
-}
-
-export function HeroCard({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
-  return <View style={[ui.hero, style]}>{children}</View>;
-}
-
-type Tone = 'warn' | 'good' | 'info' | 'neutral' | 'danger';
-const TONE: Record<Tone, { bg: string; fg: string }> = {
-  warn: { bg: COLORS.warnBg, fg: COLORS.warnText },
-  good: { bg: '#e6f6ee', fg: COLORS.good },
-  info: { bg: '#e7edf6', fg: COLORS.info },
-  neutral: { bg: COLORS.chip, fg: COLORS.subtext },
-  danger: { bg: '#fde8e6', fg: COLORS.danger },
-};
-
-export function StatusPill({ text, tone = 'neutral' }: { text: string; tone?: Tone }) {
-  const t = TONE[tone];
-  return (
-    <View style={[ui.pill, { backgroundColor: t.bg }]}>
-      <Text style={[ui.pillText, { color: t.fg }]}>{text}</Text>
-    </View>
-  );
-}
-
-export function Tile({
+export function IconChip({
+  name,
+  color = COLORS.primary,
+  bg,
+  size = 40,
+  iconSize,
   onPress,
-  iconName,
-  chipBg,
-  chipFg,
-  title,
-  sub,
-  status,
-  statusTone = 'warn',
   style,
 }: {
+  name: IconName;
+  color?: string;
+  bg?: string;
+  size?: number;
+  iconSize?: number;
   onPress?: () => void;
-  iconName: IconName;
-  chipBg: string;
-  chipFg: string;
-  title: string;
-  sub: string;
-  status?: string;
-  statusTone?: Tone;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
 }) {
-  return (
-    <Pressable style={[ui.tile, style]} onPress={onPress}>
-      <IconChip name={iconName} bg={chipBg} fg={chipFg} />
-      <Text style={ui.tileTitle}>{title}</Text>
-      <Text style={ui.tileSub}>{sub}</Text>
-      {status ? (
-        <View style={{ marginTop: 8, alignSelf: 'flex-start' }}>
-          <StatusPill text={status} tone={statusTone} />
-        </View>
-      ) : null}
-    </Pressable>
+  const inner = (
+    <View
+      style={[
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 3,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: bg ?? withAlpha(color, 0.14),
+        },
+        style,
+      ]}
+    >
+      <Icon name={name} color={color} size={iconSize ?? Math.round(size * 0.5)} />
+    </View>
   );
+  if (onPress) {
+    return (
+      <Pressable onPress={onPress} style={({ pressed }) => (pressed ? { opacity: 0.7 } : null)}>
+        {inner}
+      </Pressable>
+    );
+  }
+  return inner;
 }
 
-const ui = StyleSheet.create({
-  chip: { borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  section: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.subtext,
-    letterSpacing: 0.06 * 12,
-    textTransform: 'uppercase',
-    marginTop: 20,
-    marginBottom: 10,
-  },
-  card: { backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: COLORS.border, padding: 14 },
-  hero: {
-    backgroundColor: COLORS.navyB,
-    borderRadius: 20,
-    padding: 18,
-    boxShadow: '0 16px 30px -16px rgba(11,18,32,0.7)',
-  } as object,
-  pill: { borderRadius: 999, paddingVertical: 3, paddingHorizontal: 9, alignSelf: 'flex-start' },
-  pillText: { fontSize: 11, fontWeight: '700' },
-  tile: { backgroundColor: '#fff', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: COLORS.border },
-  tileTitle: { fontSize: 14, fontWeight: '700', color: COLORS.text, marginTop: 10 },
-  tileSub: { fontSize: 12, color: COLORS.subtext, marginTop: 2 },
-});
-
-/** Shared hero text styles for consistency across screens. */
-export const heroText = StyleSheet.create({
-  cap: { color: '#9fb0d0', fontSize: 12, fontWeight: '600' },
-  money: { color: '#fff', fontSize: 32, fontWeight: '800', letterSpacing: -0.5 },
-  sub: { color: '#9fb0d0', fontSize: 12, marginTop: 8 },
-});
-
-/** ---- Helpers ---- */
-let _uid = 0;
-function useUid(prefix: string): string {
-  const ref = React.useRef<string | null>(null);
-  if (ref.current === null) ref.current = `${prefix}-${++_uid}`;
-  return ref.current;
-}
+/* ------------------------------------------------------------------ */
+/* Avatar / AvatarStack                                               */
+/* ------------------------------------------------------------------ */
 
 function initials(name: string): string {
   const parts = (name || '').trim().split(/\s+/).filter(Boolean);
@@ -202,284 +178,592 @@ function initials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-/** Convert a list of points into a smooth-ish cubic path string. */
-function smoothPath(pts: { x: number; y: number }[]): string {
-  if (pts.length === 0) return '';
-  if (pts.length === 1) return `M${pts[0].x},${pts[0].y}`;
-  let d = `M${pts[0].x},${pts[0].y}`;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[i === 0 ? 0 : i - 1];
-    const p1 = pts[i];
-    const p2 = pts[i + 1];
-    const p3 = pts[i + 2 < pts.length ? i + 2 : i + 1];
-    const c1x = p1.x + (p2.x - p0.x) / 6;
-    const c1y = p1.y + (p2.y - p0.y) / 6;
-    const c2x = p2.x - (p3.x - p1.x) / 6;
-    const c2y = p2.y - (p3.y - p1.y) / 6;
-    d += ` C${c1x},${c1y} ${c2x},${c2y} ${p2.x},${p2.y}`;
-  }
-  return d;
-}
-
-/** ---- Sparkline: smooth line with soft gradient area fill + end dot ---- */
-export function Sparkline({
-  values,
-  width = 250,
-  height = 40,
-  color = COLORS.income,
-  fillFrom,
+export function Avatar({
+  name,
+  size = 40,
+  color,
+  style,
 }: {
-  values: number[];
-  width?: number;
-  height?: number;
-  color?: string;
-  fillFrom?: string;
-}) {
-  const gid = useUid('spark');
-  const pad = 4;
-  const w = width;
-  const h = height;
-  const vals = values && values.length ? values : [0, 0];
-  const min = Math.min(...vals);
-  const max = Math.max(...vals);
-  const span = max - min || 1;
-  const n = vals.length;
-  const pts = vals.map((v, i) => ({
-    x: pad + (n === 1 ? 0 : (i / (n - 1)) * (w - pad * 2)),
-    y: pad + (1 - (v - min) / span) * (h - pad * 2),
-  }));
-  const line = smoothPath(pts);
-  const area = `${line} L${pts[pts.length - 1].x},${h} L${pts[0].x},${h} Z`;
-  const last = pts[pts.length - 1];
-  const from = fillFrom || color;
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h}>
-      <defs>
-        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={from} stopOpacity={0.28} />
-          <stop offset="100%" stopColor={from} stopOpacity={0} />
-        </linearGradient>
-      </defs>
-      <path d={area} fill={`url(#${gid})`} stroke="none" />
-      <path d={line} fill="none" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={last.x} cy={last.y} r={3} fill={color} />
-    </svg>
-  );
-}
-
-/** ---- WeeklyBarChart: stacked vertical bars per day ---- */
-export function WeeklyBarChart({
-  days,
-  height = 170,
-}: {
-  days: { label: string; segments: { value: number; color: string }[] }[];
-  height?: number;
-}) {
-  const labelH = 20;
-  const chartH = Math.max(40, height - labelH);
-  const totals = days.map((d) => d.segments.reduce((s, seg) => s + Math.max(0, seg.value), 0));
-  const max = Math.max(1, ...totals);
-  const barW = 14;
-  return (
-    <View>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: chartH }}>
-        {days.map((d, di) => {
-          const total = totals[di];
-          const stackH = (total / max) * (chartH - 8);
-          return (
-            <View key={di} style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end', height: '100%' }}>
-              <View
-                style={{
-                  width: barW,
-                  height: Math.max(2, stackH),
-                  borderRadius: 6,
-                  overflow: 'hidden',
-                  flexDirection: 'column-reverse',
-                  backgroundColor: COLORS.track,
-                }}
-              >
-                {d.segments.map((seg, si) => {
-                  const segH = total > 0 ? (Math.max(0, seg.value) / total) * Math.max(2, stackH) : 0;
-                  return <View key={si} style={{ height: segH, backgroundColor: seg.color, width: '100%' }} />;
-                })}
-              </View>
-            </View>
-          );
-        })}
-      </View>
-      <View style={{ height: 1, backgroundColor: COLORS.border, marginTop: 2 }} />
-      <View style={{ flexDirection: 'row', marginTop: 6 }}>
-        {days.map((d, di) => (
-          <Text key={di} style={{ flex: 1, textAlign: 'center', fontSize: 11, color: COLORS.subtext, fontWeight: '600' }}>
-            {d.label}
-          </Text>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-/** ---- Gauge: 180° semicircle with track + value arc and centered % ---- */
-export function Gauge({
-  pct,
-  size = 170,
-  color = COLORS.income,
-  label,
-  sublabel,
-}: {
-  pct: number;
+  name: string;
   size?: number;
   color?: string;
-  label?: string;
-  sublabel?: string;
+  style?: StyleProp<ViewStyle>;
 }) {
-  const clamped = Math.max(0, Math.min(100, isFinite(pct) ? pct : 0));
-  const stroke = Math.max(8, size * 0.09);
-  const r = (size - stroke) / 2;
-  const cx = size / 2;
-  const cy = size / 2;
-  const w = size;
-  const h = size / 2 + stroke / 2 + 2;
-  const polar = (frac: number) => {
-    const ang = Math.PI - frac * Math.PI; // 180deg -> 0deg
-    return { x: cx + r * Math.cos(ang), y: cy - r * Math.sin(ang) };
-  };
-  const start = polar(0);
-  const end = polar(1);
-  const valEnd = polar(clamped / 100);
-  const largeVal = clamped > 50 ? 1 : 0;
-  const trackD = `M${start.x},${start.y} A${r},${r} 0 1 1 ${end.x},${end.y}`;
-  const valD = `M${start.x},${start.y} A${r},${r} 0 ${largeVal} 1 ${valEnd.x},${valEnd.y}`;
+  const bg = color ?? colorForId(name);
   return (
-    <View style={{ alignItems: 'center' }}>
-      <View style={{ width: w, height: h, position: 'relative' }}>
-        <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h}>
-          <path d={trackD} fill="none" stroke={COLORS.track} strokeWidth={stroke} strokeLinecap="round" />
-          <path d={valD} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round" />
-        </svg>
-        <View style={{ position: 'absolute', left: 0, right: 0, top: h * 0.34, alignItems: 'center' }}>
-          <Text style={{ fontSize: size * 0.2, fontWeight: '800', color: COLORS.text }}>{Math.round(clamped)}%</Text>
-        </View>
-      </View>
-      {label ? <Text style={{ fontSize: 13, fontWeight: '700', color: COLORS.text, marginTop: 2 }}>{label}</Text> : null}
-      {sublabel ? <Text style={{ fontSize: 12, color: COLORS.subtext, marginTop: 2 }}>{sublabel}</Text> : null}
+    <View
+      style={[
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          backgroundColor: bg,
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        style,
+      ]}
+    >
+      <Text
+        style={{
+          color: '#fff',
+          fontWeight: '800',
+          fontSize: Math.round(size * 0.4),
+          letterSpacing: 0.3,
+        }}
+      >
+        {initials(name)}
+      </Text>
     </View>
   );
 }
 
-/** ---- ProgressBar: rounded track + fill (clamped) ---- */
-export function ProgressBar({
-  pct,
-  color = COLORS.primary,
-  height = 8,
-  track = COLORS.track,
+export function AvatarStack({
+  names,
+  size = 32,
+  max = 4,
 }: {
-  pct: number;
-  color?: string;
-  height?: number;
-  track?: string;
+  names: string[];
+  size?: number;
+  max?: number;
 }) {
-  const clamped = Math.max(0, Math.min(100, isFinite(pct) ? pct : 0));
+  const shown = names.slice(0, max);
+  const extra = names.length - shown.length;
+  const overlap = Math.round(size * 0.32);
   return (
-    <View style={{ height, borderRadius: height / 2, backgroundColor: track, overflow: 'hidden' }}>
-      <View style={{ width: `${clamped}%`, height: '100%', backgroundColor: color, borderRadius: height / 2 }} />
+    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      {shown.map((n, i) => (
+        <View
+          key={`${n}-${i}`}
+          style={{
+            marginLeft: i === 0 ? 0 : -overlap,
+            borderRadius: size / 2,
+            borderWidth: 2,
+            borderColor: COLORS.card,
+          }}
+        >
+          <Avatar name={n} size={size} />
+        </View>
+      ))}
+      {extra > 0 && (
+        <View
+          style={{
+            marginLeft: -overlap,
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+            backgroundColor: COLORS.chip,
+            borderWidth: 2,
+            borderColor: COLORS.card,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Text style={{ color: COLORS.subtext, fontWeight: '700', fontSize: Math.round(size * 0.34) }}>
+            +{extra}
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
 
-/** ---- SegmentBar: single bar split proportionally by value ---- */
+/* ------------------------------------------------------------------ */
+/* Card                                                               */
+/* ------------------------------------------------------------------ */
+
+export function Card({
+  children,
+  style,
+  onPress,
+}: {
+  children: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
+  onPress?: () => void;
+}) {
+  const base: StyleProp<ViewStyle> = [styles.card, softShadow, style];
+  if (onPress) {
+    return (
+      <Pressable onPress={onPress} style={({ pressed }) => [base, pressed ? { opacity: 0.9 } : null]}>
+        {children}
+      </Pressable>
+    );
+  }
+  return <View style={base}>{children}</View>;
+}
+
+/* ------------------------------------------------------------------ */
+/* Button                                                             */
+/* ------------------------------------------------------------------ */
+
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+
+export function Button({
+  label,
+  onPress,
+  variant = 'primary',
+  icon,
+  disabled = false,
+  style,
+}: {
+  label: string;
+  onPress?: () => void;
+  variant?: ButtonVariant;
+  icon?: IconName;
+  disabled?: boolean;
+  style?: StyleProp<ViewStyle>;
+}) {
+  let bg = COLORS.primary;
+  let fg = '#fff';
+  let borderColor: string | undefined;
+  if (variant === 'secondary') {
+    bg = COLORS.card;
+    fg = COLORS.primary;
+    borderColor = COLORS.primary;
+  } else if (variant === 'ghost') {
+    bg = 'transparent';
+    fg = COLORS.subtext;
+  } else if (variant === 'danger') {
+    bg = COLORS.danger;
+    fg = '#fff';
+  }
+  return (
+    <Pressable
+      onPress={disabled ? undefined : onPress}
+      disabled={disabled}
+      style={({ pressed }) => [
+        {
+          height: 48,
+          borderRadius: 999,
+          paddingHorizontal: 22,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: bg,
+          borderWidth: borderColor ? 1 : 0,
+          borderColor,
+          opacity: disabled ? 0.45 : pressed ? 0.85 : 1,
+        },
+        style,
+      ]}
+    >
+      {icon && (
+        <View style={{ marginRight: 8 }}>
+          <Icon name={icon} color={fg} size={19} strokeWidth={2.1} />
+        </View>
+      )}
+      <Text style={{ color: fg, fontWeight: '800', fontSize: 15.5, letterSpacing: 0.2 }}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Pill                                                               */
+/* ------------------------------------------------------------------ */
+
+export function Pill({
+  label,
+  active = false,
+  onPress,
+}: {
+  label: string;
+  active?: boolean;
+  onPress?: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        {
+          paddingHorizontal: 14,
+          paddingVertical: 8,
+          borderRadius: 999,
+          backgroundColor: active ? COLORS.primarySoft : COLORS.chip,
+          opacity: pressed ? 0.85 : 1,
+        },
+      ]}
+    >
+      <Text
+        style={{
+          color: active ? COLORS.primaryDark : COLORS.subtext,
+          fontWeight: active ? '800' : '600',
+          fontSize: 13,
+        }}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* SectionLabel                                                       */
+/* ------------------------------------------------------------------ */
+
+export function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <Text
+      style={{
+        color: COLORS.subtext,
+        fontWeight: '700',
+        fontSize: 12,
+        letterSpacing: 0.8,
+        textTransform: 'uppercase',
+        marginBottom: 8,
+        marginTop: 4,
+      }}
+    >
+      {children}
+    </Text>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* ListRow                                                            */
+/* ------------------------------------------------------------------ */
+
+export function ListRow({
+  left,
+  avatar,
+  title,
+  subtitle,
+  rightTop,
+  rightBottom,
+  onPress,
+  style,
+}: {
+  left?: React.ReactNode;
+  avatar?: React.ReactNode;
+  title: React.ReactNode;
+  subtitle?: React.ReactNode;
+  rightTop?: React.ReactNode;
+  rightBottom?: React.ReactNode;
+  onPress?: () => void;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const leading = left ?? avatar;
+  const content = (
+    <View style={[{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10 }, style]}>
+      {leading != null && <View style={{ marginRight: 12 }}>{leading}</View>}
+      <View style={{ flex: 1, minWidth: 0 }}>
+        {typeof title === 'string' ? (
+          <Text numberOfLines={1} style={{ color: COLORS.ink, fontWeight: '700', fontSize: 15 }}>
+            {title}
+          </Text>
+        ) : (
+          title
+        )}
+        {subtitle != null &&
+          (typeof subtitle === 'string' ? (
+            <Text numberOfLines={1} style={{ color: COLORS.subtext, fontSize: 12.5, marginTop: 2 }}>
+              {subtitle}
+            </Text>
+          ) : (
+            <View style={{ marginTop: 2 }}>{subtitle}</View>
+          ))}
+      </View>
+      {(rightTop != null || rightBottom != null) && (
+        <View style={{ alignItems: 'flex-end', marginLeft: 10 }}>
+          {rightTop != null &&
+            (typeof rightTop === 'string' ? (
+              <Text style={{ color: COLORS.ink, fontWeight: '800', fontSize: 15 }}>{rightTop}</Text>
+            ) : (
+              rightTop
+            ))}
+          {rightBottom != null &&
+            (typeof rightBottom === 'string' ? (
+              <Text style={{ color: COLORS.subtext, fontSize: 12, marginTop: 2 }}>{rightBottom}</Text>
+            ) : (
+              <View style={{ marginTop: 2 }}>{rightBottom}</View>
+            ))}
+        </View>
+      )}
+    </View>
+  );
+  if (onPress) {
+    return (
+      <Pressable onPress={onPress} style={({ pressed }) => (pressed ? { opacity: 0.6 } : null)}>
+        {content}
+      </Pressable>
+    );
+  }
+  return content;
+}
+
+/* ------------------------------------------------------------------ */
+/* CategoryAvatar                                                     */
+/* ------------------------------------------------------------------ */
+
+export function CategoryAvatar({ category, size = 40 }: { category: string; size?: number }) {
+  const color = categoryColor(category);
+  const emoji = categoryIcon(category);
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: withAlpha(color, 0.18),
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Text style={{ fontSize: Math.round(size * 0.5) }}>{emoji}</Text>
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* BalanceAmount                                                      */
+/* ------------------------------------------------------------------ */
+
+export type BalanceKind = 'owed' | 'owe' | 'neutral';
+
+export function BalanceAmount({
+  cents,
+  kind,
+  size = 15,
+  weight = '800',
+  showSign = false,
+}: {
+  cents: number;
+  kind?: BalanceKind;
+  size?: number;
+  weight?: TextStyle['fontWeight'];
+  showSign?: boolean;
+}) {
+  let resolved: BalanceKind;
+  if (kind) resolved = kind;
+  else if (cents > 0) resolved = 'owed';
+  else if (cents < 0) resolved = 'owe';
+  else resolved = 'neutral';
+
+  const color =
+    resolved === 'owed' ? COLORS.owed : resolved === 'owe' ? COLORS.owe : COLORS.subtext;
+
+  const abs = Math.abs(cents);
+  const sign = showSign && cents !== 0 ? (cents > 0 ? '+' : '-') : '';
+  return (
+    <Text style={{ color, fontWeight: weight, fontSize: size }}>
+      {sign}
+      {formatINR(showSign ? abs : cents)}
+    </Text>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* SegmentBar                                                         */
+/* ------------------------------------------------------------------ */
+
 export function SegmentBar({
   segments,
   height = 10,
-  radius = 6,
+  radius,
 }: {
   segments: { value: number; color: string }[];
   height?: number;
   radius?: number;
 }) {
-  const total = segments.reduce((s, seg) => s + Math.max(0, seg.value), 0);
-  return (
-    <View style={{ height, borderRadius: radius, backgroundColor: COLORS.track, overflow: 'hidden', flexDirection: 'row' }}>
-      {total > 0
-        ? segments.map((seg, i) => (
-            <View key={i} style={{ flex: Math.max(0, seg.value), backgroundColor: seg.color, height: '100%' }} />
-          ))
-        : null}
-    </View>
-  );
-}
-
-/** ---- CreditCard: blue gradient debit/credit card visual ---- */
-export function CreditCard({
-  holder,
-  last4,
-  expiry,
-  brand = 'VISA',
-}: {
-  holder: string;
-  last4: string;
-  expiry: string;
-  brand?: string;
-}) {
+  const r = radius ?? height / 2;
+  const total = segments.reduce((s, x) => s + Math.max(0, x.value), 0);
   return (
     <View
-      style={
-        {
-          width: '100%',
-          height: 180,
-          borderRadius: 18,
-          padding: 18,
-          justifyContent: 'space-between',
-          backgroundImage: `linear-gradient(135deg, ${COLORS.cardA} 0%, ${COLORS.cardB} 100%)`,
-          boxShadow: '0 16px 30px -16px rgba(30,58,138,0.6)',
-        } as object
-      }
+      style={{
+        flexDirection: 'row',
+        height,
+        borderRadius: r,
+        overflow: 'hidden',
+        backgroundColor: COLORS.chip,
+      }}
     >
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <View
-          style={{
-            width: 40,
-            height: 30,
-            borderRadius: 6,
-            backgroundColor: 'rgba(255,255,255,0.85)',
-            borderWidth: 1,
-            borderColor: 'rgba(255,255,255,0.5)',
-          }}
-        />
-        <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 1 }}>{brand}</Text>
-      </View>
-      <Text style={{ color: '#fff', fontSize: 20, fontWeight: '700', letterSpacing: 2 }}>
-        {`••••  ••••  ••••  ${last4}`}
-      </Text>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-        <View>
-          <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 9, fontWeight: '700', letterSpacing: 1 }}>CARD HOLDER</Text>
-          <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700', marginTop: 2 }}>{holder}</Text>
-        </View>
-        <View style={{ alignItems: 'flex-end' }}>
-          <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 9, fontWeight: '700', letterSpacing: 1 }}>EXPIRES</Text>
-          <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700', marginTop: 2 }}>{expiry}</Text>
-        </View>
-      </View>
+      {total > 0 &&
+        segments.map((s, i) => (
+          <View key={i} style={{ flexGrow: Math.max(0, s.value) / total, backgroundColor: s.color }} />
+        ))}
     </View>
   );
 }
 
-/** ---- Avatar: circle with 1-2 letter initials ---- */
-export function Avatar({
-  name,
-  size = 40,
-  bg = COLORS.accentSoft,
-  fg = COLORS.primary,
+/* ------------------------------------------------------------------ */
+/* Money                                                              */
+/* ------------------------------------------------------------------ */
+
+export function Money({
+  cents,
+  size = 15,
+  weight = '700',
+  color = COLORS.ink,
+  style,
 }: {
-  name: string;
+  cents: number;
   size?: number;
-  bg?: string;
-  fg?: string;
+  weight?: TextStyle['fontWeight'];
+  color?: string;
+  style?: StyleProp<TextStyle>;
+}) {
+  return <Text style={[{ color, fontWeight: weight, fontSize: size }, style]}>{formatINR(cents)}</Text>;
+}
+
+/* ------------------------------------------------------------------ */
+/* Field                                                              */
+/* ------------------------------------------------------------------ */
+
+export function Field({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  keyboardType,
+  multiline = false,
+  autoFocus = false,
+  style,
+}: {
+  label?: string;
+  value: string;
+  onChangeText?: (t: string) => void;
+  placeholder?: string;
+  keyboardType?: 'default' | 'numeric' | 'decimal-pad' | 'email-address' | 'phone-pad';
+  multiline?: boolean;
+  autoFocus?: boolean;
+  style?: StyleProp<ViewStyle>;
 }) {
   return (
-    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: bg, alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ color: fg, fontWeight: '800', fontSize: size * 0.4 }}>{initials(name)}</Text>
+    <View style={style}>
+      {label != null && (
+        <Text style={{ color: COLORS.subtext, fontWeight: '700', fontSize: 12.5, marginBottom: 6 }}>
+          {label}
+        </Text>
+      )}
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={COLORS.muted}
+        keyboardType={keyboardType}
+        multiline={multiline}
+        autoFocus={autoFocus}
+        style={
+          {
+            borderWidth: 1,
+            borderColor: COLORS.border,
+            backgroundColor: COLORS.card,
+            borderRadius: 12,
+            paddingHorizontal: 14,
+            paddingVertical: 12,
+            fontSize: 15,
+            color: COLORS.ink,
+            minHeight: multiline ? 84 : undefined,
+            textAlignVertical: multiline ? 'top' : 'center',
+            outlineStyle: 'none',
+          } as unknown as TextStyle
+        }
+      />
     </View>
   );
 }
+
+/* ------------------------------------------------------------------ */
+/* EmptyState                                                         */
+/* ------------------------------------------------------------------ */
+
+export function EmptyState({
+  emoji,
+  title,
+  subtitle,
+  actionLabel,
+  onAction,
+}: {
+  emoji?: string;
+  title: string;
+  subtitle?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 40, paddingHorizontal: 24 }}>
+      {emoji != null && <Text style={{ fontSize: 44, marginBottom: 12 }}>{emoji}</Text>}
+      <Text style={{ color: COLORS.ink, fontWeight: '800', fontSize: 17, textAlign: 'center' }}>{title}</Text>
+      {subtitle != null && (
+        <Text style={{ color: COLORS.subtext, fontSize: 13.5, textAlign: 'center', marginTop: 6, lineHeight: 20 }}>
+          {subtitle}
+        </Text>
+      )}
+      {actionLabel != null && onAction && (
+        <View style={{ marginTop: 18 }}>
+          <Button label={actionLabel} onPress={onAction} icon="plus" />
+        </View>
+      )}
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* MiniBars                                                           */
+/* ------------------------------------------------------------------ */
+
+export function MiniBars({
+  data,
+  height = 44,
+  color = COLORS.primary,
+  labels,
+}: {
+  data: number[];
+  height?: number;
+  color?: string;
+  labels?: string[];
+}) {
+  const max = Math.max(1, ...data.map((d) => Math.abs(d)));
+  return (
+    <View>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', height, gap: 6 }}>
+        {data.map((d, i) => {
+          const h = Math.max(3, (Math.abs(d) / max) * height);
+          const isLast = i === data.length - 1;
+          return (
+            <View key={i} style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end', height }}>
+              <View
+                style={{
+                  width: '100%',
+                  height: h,
+                  borderRadius: 5,
+                  backgroundColor: isLast ? color : withAlpha(color, 0.3),
+                }}
+              />
+            </View>
+          );
+        })}
+      </View>
+      {labels && (
+        <View style={{ flexDirection: 'row', gap: 6, marginTop: 5 }}>
+          {labels.map((l, i) => (
+            <Text key={i} style={{ flex: 1, textAlign: 'center', color: COLORS.muted, fontSize: 10 }}>
+              {l}
+            </Text>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* helpers                                                            */
+/* ------------------------------------------------------------------ */
+
+/** Add an alpha channel to a #RRGGBB hex color. */
+function withAlpha(hex: string, alpha: number): string {
+  const h = hex.replace('#', '');
+  if (h.length !== 6) return hex;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+const styles = StyleSheet.create({
+  card: {
+    backgroundColor: COLORS.card,
+    borderRadius: 20,
+    padding: 16,
+  },
+});

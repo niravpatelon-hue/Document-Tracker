@@ -1,13 +1,11 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { COLORS } from '../theme';
-import type { AppMode } from '../store';
 
-export type TabKey = 'home' | 'analytics' | 'groups' | 'business' | 'profile';
+export type TabKey = 'home' | 'expenses' | 'groups' | 'account';
 
 interface Props {
   active: TabKey | null;
-  mode: AppMode;
   onNavigate: (tab: TabKey) => void;
   onScan: () => void;
 }
@@ -32,10 +30,10 @@ function Icon({ name, color, size = 22 }: { name: TabKey | 'scan'; color: string
           <path d="M6 10v9h12v-9" />
         </svg>
       );
-    case 'analytics':
+    case 'expenses':
       return (
         <svg {...common}>
-          <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" />
+          <path d="M4 6h16M4 12h16M4 18h10" />
         </svg>
       );
     case 'groups':
@@ -46,14 +44,7 @@ function Icon({ name, color, size = 22 }: { name: TabKey | 'scan'; color: string
           <path d="M3 20c0-3 3-5 6-5s6 2 6 5" />
         </svg>
       );
-    case 'business':
-      return (
-        <svg {...common}>
-          <rect x="3" y="7" width="18" height="13" rx="2" />
-          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" />
-        </svg>
-      );
-    case 'profile':
+    case 'account':
       return (
         <svg {...common}>
           <circle cx="12" cy="8" r="4" />
@@ -63,8 +54,8 @@ function Icon({ name, color, size = 22 }: { name: TabKey | 'scan'; color: string
     case 'scan':
       return (
         <svg {...common} strokeWidth={2.2}>
-          <rect x="3" y="6" width="18" height="13" rx="2" />
-          <circle cx="12" cy="12.5" r="3" />
+          <path d="M4 8V6a2 2 0 012-2h2M16 4h2a2 2 0 012 2v2M20 16v2a2 2 0 01-2 2h-2M8 20H6a2 2 0 01-2-2v-2" />
+          <path d="M4 12h16" />
         </svg>
       );
     default:
@@ -72,26 +63,26 @@ function Icon({ name, color, size = 22 }: { name: TabKey | 'scan'; color: string
   }
 }
 
-export default function TabBar({ active, mode, onNavigate, onScan }: Props) {
-  const thirdTab: { key: TabKey; label: string } =
-    mode === 'business' ? { key: 'business', label: 'Business' } : { key: 'groups', label: 'Groups' };
-  const tabs: { key: TabKey; label: string }[] = [
-    { key: 'home', label: 'Home' },
-    { key: 'analytics', label: 'Spending' },
-    thirdTab,
-    { key: 'profile', label: 'Profile' },
-  ];
-  const left = tabs.slice(0, 2);
-  const right = tabs.slice(2);
+const TABS: { key: TabKey; label: string }[] = [
+  { key: 'home', label: 'Home' },
+  { key: 'expenses', label: 'Expenses' },
+  { key: 'groups', label: 'Groups' },
+  { key: 'account', label: 'Account' },
+];
+
+export default function TabBar({ active, onNavigate, onScan }: Props) {
+  const left = TABS.slice(0, 2);
+  const right = TABS.slice(2);
   return (
     <View style={styles.bar}>
       {left.map((t) => (
         <TabButton key={t.key} k={t.key} label={t.label} active={active === t.key} onPress={() => onNavigate(t.key)} />
       ))}
       <View style={styles.fabSlot}>
-        <Pressable style={styles.fab} onPress={onScan} accessibilityLabel="Scan a document">
-          <Icon name="scan" color="#fff" size={24} />
+        <Pressable style={styles.fab} onPress={onScan} accessibilityLabel="Scan a receipt">
+          <Icon name="scan" color="#fff" size={26} />
         </Pressable>
+        <Text style={styles.fabLabel}>Scan</Text>
       </View>
       {right.map((t) => (
         <TabButton key={t.key} k={t.key} label={t.label} active={active === t.key} onPress={() => onNavigate(t.key)} />
@@ -103,7 +94,7 @@ export default function TabBar({ active, mode, onNavigate, onScan }: Props) {
 function TabButton({ k, label, active, onPress }: { k: TabKey; label: string; active: boolean; onPress: () => void }) {
   return (
     <Pressable style={styles.item} onPress={onPress}>
-      <Icon name={k} color={active ? COLORS.primary : COLORS.subtext} />
+      <Icon name={k} color={active ? COLORS.primary : COLORS.muted} />
       <Text style={[styles.label, active && styles.labelActive]}>{label}</Text>
     </Pressable>
   );
@@ -114,25 +105,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    height: 62,
+    height: 64,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
     backgroundColor: '#fff',
     position: 'relative',
   },
-  item: { flex: 1, alignItems: 'center', gap: 3, paddingTop: 4 },
-  label: { fontSize: 10.5, fontWeight: '600', color: COLORS.subtext },
+  item: { flex: 1, alignItems: 'center', gap: 3, paddingTop: 6 },
+  label: { fontSize: 10.5, fontWeight: '600', color: COLORS.muted },
   labelActive: { color: COLORS.primary },
-  fabSlot: { width: 64, alignItems: 'center' },
+  fabSlot: { width: 66, alignItems: 'center' },
   fab: {
     position: 'absolute',
-    top: -24,
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    top: -26,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: '0 10px 20px -6px rgba(29,78,216,0.6)',
+    boxShadow: '0 10px 20px -6px rgba(28,194,159,0.6)',
   } as object,
+  fabLabel: { fontSize: 10.5, fontWeight: '700', color: COLORS.primary, marginTop: 34 },
 });

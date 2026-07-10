@@ -1,13 +1,13 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { mileageSummary, tripReimbursementCents } from '@domain/business/mileage';
 import { formatINR } from '@domain/money';
 import { COLORS } from '../theme';
-import { Card, HeroCard, Icon, IconChip, SectionLabel, heroText } from '../components/ui';
-import type { WebMileageTrip } from '../store';
+import { Button, Card, Field, Icon, IconChip, ListRow, SectionLabel, EmptyState } from '../components/ui';
+import type { MileageTrip } from '../store';
 
 interface Props {
-  mileage: WebMileageTrip[];
+  mileage: MileageTrip[];
   onAdd: (t: { dateISO: string; purpose: string; route: string; km: number; ratePaisePerKm: number }) => void;
   onDelete: (id: string) => void;
 }
@@ -30,6 +30,7 @@ export default function MileageScreen({ mileage, onAdd, onDelete }: Props) {
   const rateNum = parseFloat(rate) || 0;
   const ratePaisePerKm = Math.round(rateNum * 100);
   const liveReimbursement = tripReimbursementCents(kmNum, ratePaisePerKm);
+  const canSave = kmNum > 0 && !!route.trim();
 
   function startAdd() {
     setDateISO(TODAY);
@@ -41,7 +42,7 @@ export default function MileageScreen({ mileage, onAdd, onDelete }: Props) {
   }
 
   function save() {
-    if (kmNum <= 0 || !route.trim()) return;
+    if (!canSave) return;
     onAdd({
       dateISO,
       purpose: purpose.trim(),
@@ -52,49 +53,50 @@ export default function MileageScreen({ mileage, onAdd, onDelete }: Props) {
     setAdding(false);
   }
 
-  const canSave = kmNum > 0 && !!route.trim();
-
   if (adding) {
     return (
       <ScrollView style={styles.container} contentContainerStyle={styles.scroll}>
         <View style={styles.headerRow}>
-          <Pressable onPress={() => setAdding(false)} hitSlop={8}>
-            <Icon name="chevron" color={COLORS.text} size={22} strokeWidth={2.4} />
+          <Pressable onPress={() => setAdding(false)} hitSlop={8} style={styles.backBtn}>
+            <Icon name="chevron" color={COLORS.text} size={20} strokeWidth={2.4} />
           </Pressable>
           <Text style={styles.headerTitle}>Log trip</Text>
-          <View style={{ width: 22 }} />
+          <View style={{ width: 32 }} />
         </View>
 
-        <Card style={{ marginTop: 12 }}>
-          <Text style={styles.label}>Date</Text>
-          <TextInput style={styles.input} value={dateISO} onChangeText={setDateISO} placeholder="YYYY-MM-DD" />
-
-          <Text style={styles.label}>Purpose</Text>
-          <TextInput
-            style={styles.input}
+        <Card style={{ marginTop: 14 }}>
+          <Field label="Date" value={dateISO} onChangeText={setDateISO} placeholder="YYYY-MM-DD" />
+          <Field
+            label="Purpose"
             value={purpose}
             onChangeText={setPurpose}
             placeholder="Client meeting, site visit…"
+            style={{ marginTop: 14 }}
           />
-
-          <Text style={styles.label}>Route</Text>
-          <TextInput style={styles.input} value={route} onChangeText={setRoute} placeholder="Office → Client site" />
-
+          <Field
+            label="Route"
+            value={route}
+            onChangeText={setRoute}
+            placeholder="Office to Client site"
+            style={{ marginTop: 14 }}
+          />
           <View style={styles.row2}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.label}>Distance (km)</Text>
-              <TextInput style={styles.input} value={km} onChangeText={setKm} keyboardType="decimal-pad" placeholder="0" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.label}>Rate (₹/km)</Text>
-              <TextInput
-                style={styles.input}
-                value={rate}
-                onChangeText={setRate}
-                keyboardType="decimal-pad"
-                placeholder="12"
-              />
-            </View>
+            <Field
+              label="Distance (km)"
+              value={km}
+              onChangeText={setKm}
+              keyboardType="decimal-pad"
+              placeholder="0"
+              style={{ flex: 1 }}
+            />
+            <Field
+              label="Rate (Rs/km)"
+              value={rate}
+              onChangeText={setRate}
+              keyboardType="decimal-pad"
+              placeholder={String(DEFAULT_RATE_RUPEES)}
+              style={{ flex: 1 }}
+            />
           </View>
         </Card>
 
@@ -103,68 +105,74 @@ export default function MileageScreen({ mileage, onAdd, onDelete }: Props) {
             <Text style={styles.totalLabel}>Distance</Text>
             <Text style={styles.totalValue}>{kmNum.toFixed(1)} km</Text>
           </View>
-          <View style={[styles.totalRow, { marginTop: 4 }]}>
+          <View style={[styles.totalRow, { marginTop: 6 }]}>
             <Text style={styles.totalLabelBig}>Reimbursement</Text>
             <Text style={styles.totalValueBig}>{formatINR(liveReimbursement)}</Text>
           </View>
         </Card>
 
-        <Pressable style={[styles.primary, !canSave && styles.primaryDisabled]} onPress={save} disabled={!canSave}>
-          <Text style={styles.primaryText}>Save trip</Text>
-        </Pressable>
+        <Button
+          label="Save trip"
+          onPress={save}
+          disabled={!canSave}
+          icon="check"
+          style={{ marginTop: 18 }}
+        />
       </ScrollView>
     );
   }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scroll}>
-      <HeroCard>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <IconChip name="truck" bg="rgba(255,255,255,0.15)" fg="#fff" size={38} />
-          <View>
-            <Text style={heroText.cap}>Total reimbursement</Text>
-            <Text style={heroText.money}>{formatINR(summary.totalCents)}</Text>
+      <SectionLabel>Mileage</SectionLabel>
+
+      <Card>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <IconChip name="car" bg={COLORS.primarySoft} color={COLORS.primary} size={44} />
+          <View style={{ marginLeft: 12, flex: 1 }}>
+            <Text style={styles.summaryLabel}>Total reimbursement</Text>
+            <Text style={styles.summaryValue}>{formatINR(summary.totalCents)}</Text>
           </View>
         </View>
-        <Text style={heroText.sub}>
-          {summary.totalKm.toFixed(1)} km across {summary.tripCount} trip{summary.tripCount === 1 ? '' : 's'}
-        </Text>
-      </HeroCard>
+        <View style={styles.summaryFooter}>
+          <Text style={styles.summaryMeta}>
+            {summary.totalKm.toFixed(1)} km · {summary.tripCount} trip{summary.tripCount === 1 ? '' : 's'}
+          </Text>
+        </View>
+      </Card>
 
-      <Pressable style={styles.primary} onPress={startAdd}>
-        <Icon name="plus" color="#fff" size={18} />
-        <Text style={styles.primaryText}>Log trip</Text>
-      </Pressable>
+      <Button label="Log trip" onPress={startAdd} icon="plus" style={{ marginTop: 14 }} />
 
-      <SectionLabel>Trips</SectionLabel>
-      {sorted.length === 0 ? (
-        <Card><Text style={styles.empty}>No trips logged yet.</Text></Card>
-      ) : (
-        sorted.map((t) => {
-          const reimb = tripReimbursementCents(t.km, t.ratePaisePerKm);
-          return (
-            <Card key={t.id} style={{ marginBottom: 10 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-                <IconChip name="mapPin" bg={COLORS.accentSoft} fg={COLORS.primary} size={38} />
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.tripRoute}>{t.route}</Text>
-                  <Text style={styles.tripMeta}>
-                    {t.purpose ? `${t.purpose} · ` : ''}
-                    {t.dateISO}
-                  </Text>
+      <View style={{ marginTop: 22 }}>
+        <SectionLabel>Trips</SectionLabel>
+        {sorted.length === 0 ? (
+          <Card>
+            <EmptyState emoji="🚗" title="No trips logged yet" subtitle="Log a trip to start tracking reimbursement." />
+          </Card>
+        ) : (
+          <Card style={{ paddingVertical: 4 }}>
+            {sorted.map((t, i) => {
+              const reimb = tripReimbursementCents(t.km, t.ratePaisePerKm);
+              return (
+                <View key={t.id}>
+                  <ListRow
+                    left={<IconChip name="mapPin" bg={COLORS.primarySoft} color={COLORS.primary} size={40} />}
+                    title={t.route}
+                    subtitle={`${t.purpose ? `${t.purpose} · ` : ''}${t.dateISO} · ${t.km.toFixed(1)} km`}
+                    rightTop={formatINR(reimb)}
+                    rightBottom={
+                      <Pressable onPress={() => onDelete(t.id)} hitSlop={8} style={{ marginTop: 4 }}>
+                        <Icon name="trash" color={COLORS.danger} size={16} />
+                      </Pressable>
+                    }
+                  />
+                  {i < sorted.length - 1 && <View style={styles.divider} />}
                 </View>
-                <Pressable onPress={() => onDelete(t.id)} hitSlop={8}>
-                  <Icon name="trash" color={COLORS.danger} size={17} />
-                </Pressable>
-              </View>
-              <View style={styles.tripFooter}>
-                <Text style={styles.tripKm}>{t.km.toFixed(1)} km</Text>
-                <Text style={styles.tripReimb}>{formatINR(reimb)}</Text>
-              </View>
-            </Card>
-          );
-        })
-      )}
+              );
+            })}
+          </Card>
+        )}
+      </View>
     </ScrollView>
   );
 }
@@ -173,40 +181,29 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.screenBg },
   scroll: { padding: 16, paddingBottom: 28 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: COLORS.text },
-  label: { fontSize: 13, fontWeight: '600', color: COLORS.subtext, marginTop: 8, marginBottom: 6 },
-  input: {
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-    fontSize: 15,
-    color: COLORS.text,
-    backgroundColor: '#fff',
-  },
-  row2: { flexDirection: 'row', gap: 10 },
-  empty: { color: COLORS.subtext },
-  primary: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 12,
-    paddingVertical: 14,
-    marginTop: 16,
-    flexDirection: 'row',
+  backBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    backgroundColor: COLORS.chip,
   },
-  primaryDisabled: { opacity: 0.5 },
-  primaryText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
-  totalLabel: { color: COLORS.subtext, fontSize: 13 },
-  totalValue: { color: COLORS.text, fontSize: 13, fontWeight: '600' },
-  totalLabelBig: { color: COLORS.text, fontSize: 15, fontWeight: '700' },
-  totalValueBig: { color: COLORS.text, fontSize: 15, fontWeight: '800' },
-  tripRoute: { fontSize: 14, fontWeight: '700', color: COLORS.text },
-  tripMeta: { fontSize: 12, color: COLORS.subtext, marginTop: 2 },
-  tripFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 },
-  tripKm: { fontSize: 13, color: COLORS.subtext, fontWeight: '600' },
-  tripReimb: { fontSize: 16, fontWeight: '800', color: COLORS.text },
+  headerTitle: { fontSize: 16, fontWeight: '800', color: COLORS.ink },
+  row2: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  summaryLabel: { fontSize: 12.5, fontWeight: '700', color: COLORS.subtext },
+  summaryValue: { fontSize: 22, fontWeight: '800', color: COLORS.ink, marginTop: 2 },
+  summaryFooter: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.divider,
+  },
+  summaryMeta: { fontSize: 12.5, color: COLORS.subtext, fontWeight: '600' },
+  totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  totalLabel: { color: COLORS.subtext, fontSize: 13, fontWeight: '600' },
+  totalValue: { color: COLORS.ink, fontSize: 13, fontWeight: '700' },
+  totalLabelBig: { color: COLORS.ink, fontSize: 15, fontWeight: '800' },
+  totalValueBig: { color: COLORS.primary, fontSize: 18, fontWeight: '800' },
+  divider: { height: 1, backgroundColor: COLORS.divider, marginLeft: 52 },
 });

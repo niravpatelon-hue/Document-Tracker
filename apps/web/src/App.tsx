@@ -1,196 +1,105 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import type { DocumentCategory } from '@domain/ocr/fieldparser';
 import { COLORS } from './theme';
 import {
-  buildDocument,
-  findDuplicates,
   loadState,
   loadUser,
   newId,
   saveState,
   saveUser,
-  type AppMode,
-  type BusinessProfile,
-  type CreateDocInput,
-  type InvoiceStatus,
-  type WebBudget,
-  type WebBusinessExpense,
-  type WebClient,
-  type WebDocument,
-  type WebExpense,
-  type WebGroup,
-  type WebIncome,
-  type WebInvoice,
-  type WebMileageTrip,
-  type WebSettlement,
-  type WebTransaction,
+  type Budget,
+  type Expense,
+  type Group,
+  type MileageTrip,
+  type Settlement,
   type WebUser,
 } from './store';
 import { seedState } from './seed';
-import HomeScreen from './screens/HomeScreen';
-import DocumentsScreen from './screens/DocumentsScreen';
-import ReviewScreen from './screens/ReviewScreen';
-import SpendingsScreen from './screens/SpendingsScreen';
-import TrackedItemsScreen from './screens/TrackedItemsScreen';
+import ActivityScreen from './screens/ActivityScreen';
+import ExpensesScreen from './screens/ExpensesScreen';
+import ScanScreen from './screens/ScanScreen';
+import AddExpenseScreen from './screens/AddExpenseScreen';
 import GroupsScreen from './screens/GroupsScreen';
 import GroupDetailScreen from './screens/GroupDetailScreen';
-import BusinessScreen from './screens/BusinessScreen';
-import InvoicesScreen from './screens/InvoicesScreen';
-import ClientsScreen from './screens/ClientsScreen';
-import GSTScreen from './screens/GSTScreen';
+import ReportsScreen from './screens/ReportsScreen';
 import MileageScreen from './screens/MileageScreen';
+import AccountScreen from './screens/AccountScreen';
 import LoginScreen from './screens/LoginScreen';
-import ProfileScreen from './screens/ProfileScreen';
 import TabBar, { type TabKey } from './components/TabBar';
 
-export interface ReviewPrefill {
-  category: DocumentCategory;
-  vendor: string;
-  totalCents: number | null;
+/** Prefill produced by the scanner and consumed by AddExpense. */
+export interface ScanPrefill {
+  description: string | null;
+  amountCents: number | null;
   taxCents: number | null;
-  dateISO: string;
-  imei: string | null;
-  serial: string | null;
-  productName: string | null;
-  retailer: string | null;
+  dateISO: string | null;
+  category: string;
   imageDataUrl: string | null;
   rawText: string;
-  ocrMode: 'on_device' | 'cloud' | 'manual';
+  source: 'scan';
 }
 
 type Route =
   | { name: 'home' }
-  | { name: 'documents'; autoScan?: boolean; intendedCategory?: DocumentCategory }
-  | { name: 'review'; prefill: ReviewPrefill }
-  | { name: 'analytics' }
-  | { name: 'tracked' }
+  | { name: 'expenses' }
   | { name: 'groups' }
-  | { name: 'group'; groupId: string; prefillDocId?: string }
-  | { name: 'business' }
-  | { name: 'invoices' }
-  | { name: 'clients' }
-  | { name: 'gst' }
-  | { name: 'mileage' }
-  | { name: 'profile' };
-
-/** A blank prefill for adding an item by hand (no scan). */
-function blankPrefill(category: DocumentCategory): ReviewPrefill {
-  return {
-    category,
-    vendor: '',
-    totalCents: null,
-    taxCents: null,
-    dateISO: '',
-    imei: null,
-    serial: null,
-    productName: null,
-    retailer: null,
-    imageDataUrl: null,
-    rawText: '',
-    ocrMode: 'manual',
-  };
-}
+  | { name: 'account' }
+  | { name: 'group'; groupId: string }
+  | { name: 'scan' }
+  | { name: 'add'; prefill?: ScanPrefill | null; presetGroupId?: string | null; editing?: Expense | null; returnTo?: Route }
+  | { name: 'reports' }
+  | { name: 'mileage' };
 
 const TITLES: Record<string, string> = {
-  documents: 'Documents',
-  review: 'Review & Save',
-  analytics: 'Spending',
-  tracked: 'Tracked items',
+  expenses: 'Expenses',
   groups: 'Groups',
-  business: 'Business',
-  invoices: 'Invoices',
-  clients: 'Clients',
-  gst: 'GST & Tax',
+  account: 'Account',
+  scan: 'Scan receipt',
+  reports: 'Reports',
   mileage: 'Mileage',
-  profile: 'Profile',
 };
 
-const TAB_ROUTES = new Set(['home', 'analytics', 'groups', 'business', 'profile', 'documents', 'tracked']);
-const BACK_ROUTES = new Set(['review', 'group', 'invoices', 'clients', 'gst', 'mileage']);
-const EMPTY_BUSINESS_PROFILE: BusinessProfile = { name: '', gstin: '' };
+const TAB_ROUTES = new Set(['home', 'expenses', 'groups', 'account']);
+const BACK_ROUTES = new Set(['group', 'scan', 'add', 'reports', 'mileage']);
 
 export default function App() {
   const [route, setRoute] = useState<Route>({ name: 'home' });
-  const [documents, setDocuments] = useState<WebDocument[]>([]);
-  const [transactions, setTransactions] = useState<WebTransaction[]>([]);
-  const [incomes, setIncomes] = useState<WebIncome[]>([]);
-  const [budgets, setBudgets] = useState<WebBudget[]>([]);
-  const [groups, setGroups] = useState<WebGroup[]>([]);
-  const [expenses, setExpenses] = useState<WebExpense[]>([]);
-  const [settlements, setSettlements] = useState<WebSettlement[]>([]);
-  const [businessProfile, setBusinessProfile] = useState<BusinessProfile>(EMPTY_BUSINESS_PROFILE);
-  const [clients, setClients] = useState<WebClient[]>([]);
-  const [invoices, setInvoices] = useState<WebInvoice[]>([]);
-  const [mileage, setMileage] = useState<WebMileageTrip[]>([]);
-  const [businessExpenses, setBusinessExpenses] = useState<WebBusinessExpense[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [settlements, setSettlements] = useState<Settlement[]>([]);
+  const [mileage, setMileage] = useState<MileageTrip[]>([]);
+  const [budgets, setBudgets] = useState<Budget[]>([]);
   const [user, setUser] = useState<WebUser | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     const s = loadState() ?? seedState();
-    setDocuments(s.documents ?? []);
-    setTransactions(s.transactions ?? []);
-    setIncomes(s.incomes ?? []);
-    setBudgets(s.budgets ?? []);
-    setGroups(s.groups ?? []);
     setExpenses(s.expenses ?? []);
+    setGroups(s.groups ?? []);
     setSettlements(s.settlements ?? []);
-    setBusinessProfile(s.businessProfile ?? EMPTY_BUSINESS_PROFILE);
-    setClients(s.clients ?? []);
-    setInvoices(s.invoices ?? []);
     setMileage(s.mileage ?? []);
-    setBusinessExpenses(s.businessExpenses ?? []);
+    setBudgets(s.budgets ?? []);
     setUser(loadUser());
     setLoaded(true);
   }, []);
 
   useEffect(() => {
     if (loaded) {
-      saveState({
-        documents,
-        transactions,
-        incomes,
-        budgets,
-        groups,
-        expenses,
-        settlements,
-        businessProfile,
-        clients,
-        invoices,
-        mileage,
-        businessExpenses,
-      });
+      saveState({ expenses, groups, settlements, mileage, budgets });
     }
-  }, [documents, transactions, incomes, budgets, groups, expenses, settlements, businessProfile, clients, invoices, mileage, businessExpenses, loaded]);
+  }, [expenses, groups, settlements, mileage, budgets, loaded]);
 
   const navigate = useCallback((next: Route) => setRoute(next), []);
-  const mode: AppMode = user?.mode ?? 'personal';
 
-  const setMode = useCallback((m: AppMode) => {
-    setUser((prev) => {
-      if (!prev) return prev;
-      const next = { ...prev, mode: m };
-      saveUser(next);
-      return next;
-    });
-    setRoute({ name: 'home' });
-  }, []);
-
-  const addDocument = useCallback(
-    (input: CreateDocInput): WebDocument[] => {
-      const dupes = findDuplicates(input, documents);
-      if (dupes.length > 0 && !window.confirm('This looks like a purchase you already logged. Save anyway?')) {
-        return dupes;
+  const saveExpense = useCallback(
+    (draft: Omit<Expense, 'id' | 'createdAt'>, editingId?: string | null) => {
+      if (editingId) {
+        setExpenses((prev) => prev.map((e) => (e.id === editingId ? { ...e, ...draft, id: e.id, createdAt: e.createdAt } : e)));
+      } else {
+        setExpenses((prev) => [{ ...draft, id: newId(), createdAt: Date.now() }, ...prev]);
       }
-      const { doc, txn } = buildDocument(input);
-      setDocuments((prev) => [doc, ...prev]);
-      if (txn) {
-        setTransactions((prev) => [txn, ...prev]);
-      }
-      return [];
     },
-    [documents],
+    [],
   );
 
   const showTabBar = TAB_ROUTES.has(route.name);
@@ -200,184 +109,121 @@ export default function App() {
   const activeTab: TabKey | null =
     route.name === 'home'
       ? 'home'
-      : route.name === 'analytics'
-      ? 'analytics'
-      : route.name === 'groups'
+      : route.name === 'expenses'
+      ? 'expenses'
+      : route.name === 'groups' || route.name === 'group'
       ? 'groups'
-      : route.name === 'business'
-      ? 'business'
-      : route.name === 'profile'
-      ? 'profile'
+      : route.name === 'account'
+      ? 'account'
       : null;
 
   const goBack = () => {
-    if (route.name === 'group') return navigate({ name: 'groups' });
-    if (route.name === 'invoices' || route.name === 'clients' || route.name === 'gst' || route.name === 'mileage') {
-      return navigate({ name: 'business' });
+    switch (route.name) {
+      case 'group':
+        return navigate({ name: 'groups' });
+      case 'scan':
+        return navigate({ name: 'home' });
+      case 'add':
+        return navigate(route.returnTo ?? { name: 'home' });
+      case 'reports':
+      case 'mileage':
+        return navigate({ name: 'account' });
+      default:
+        return navigate({ name: 'home' });
     }
-    return navigate({ name: 'home' });
   };
 
   const body = useMemo(() => {
     switch (route.name) {
       case 'home':
         return (
-          <HomeScreen
-            mode={mode}
+          <ActivityScreen
             userName={user?.name ?? null}
-            transactions={transactions}
-            incomes={incomes}
-            documents={documents}
+            expenses={expenses}
             groups={groups}
-            invoices={invoices}
-            clients={clients}
-            businessExpenses={businessExpenses}
-            mileage={mileage}
-            businessProfile={businessProfile}
-            onScan={() => navigate({ name: 'documents', autoScan: true })}
-            onOpenSpending={() => navigate({ name: 'analytics' })}
-            onOpenReceipts={() => navigate({ name: 'documents' })}
-            onOpenTracked={() => navigate({ name: 'tracked' })}
+            settlements={settlements}
+            onScan={() => navigate({ name: 'scan' })}
+            onAddExpense={() => navigate({ name: 'add', returnTo: { name: 'home' } })}
+            onOpenExpenses={() => navigate({ name: 'expenses' })}
             onOpenGroups={() => navigate({ name: 'groups' })}
-            onOpenInvoices={() => navigate({ name: 'invoices' })}
-            onOpenGST={() => navigate({ name: 'gst' })}
-            onOpenClients={() => navigate({ name: 'clients' })}
-            onOpenMileage={() => navigate({ name: 'mileage' })}
+            onOpenGroup={(groupId) => navigate({ name: 'group', groupId })}
+            onOpenReports={() => navigate({ name: 'reports' })}
           />
         );
-      case 'documents':
+      case 'expenses':
         return (
-          <DocumentsScreen
-            documents={documents}
+          <ExpensesScreen
+            expenses={expenses}
             groups={groups}
-            autoOpenScan={route.autoScan}
-            intendedCategory={route.intendedCategory}
-            onReview={(prefill) => navigate({ name: 'review', prefill })}
-            onOpenGroups={() => navigate({ name: 'groups' })}
-            onSplitToGroup={(groupId, docId) => navigate({ name: 'group', groupId, prefillDocId: docId })}
+            onScan={() => navigate({ name: 'scan' })}
+            onAddExpense={() => navigate({ name: 'add', returnTo: { name: 'expenses' } })}
+            onEditExpense={(e) => navigate({ name: 'add', editing: e, returnTo: { name: 'expenses' } })}
+            onOpenReports={() => navigate({ name: 'reports' })}
           />
         );
-      case 'review':
+      case 'scan':
         return (
-          <ReviewScreen
-            prefill={route.prefill}
-            onSave={(input) => {
-              if (addDocument(input).length === 0) {
-                navigate({ name: 'home' });
-              }
-            }}
+          <ScanScreen
+            onParsed={(prefill) => navigate({ name: 'add', prefill, returnTo: { name: 'home' } })}
+            onManual={() => navigate({ name: 'add', returnTo: { name: 'home' } })}
             onCancel={() => navigate({ name: 'home' })}
           />
         );
-      case 'analytics':
+      case 'add': {
+        const editing = route.editing ?? null;
+        const returnTo = route.returnTo ?? { name: 'home' as const };
         return (
-          <SpendingsScreen
-            mode={mode}
-            transactions={transactions}
-            incomes={incomes}
-            budgets={budgets}
-            businessExpenses={businessExpenses}
-            onScan={() => navigate({ name: 'documents', autoScan: true })}
-            onAddExpense={() =>
-              mode === 'business'
-                ? navigate({ name: 'gst' })
-                : navigate({ name: 'review', prefill: blankPrefill('bills_receipts') })
-            }
-            onOpenMileage={() => navigate({ name: 'mileage' })}
-            onAddBudget={(b) => setBudgets((prev) => [...prev, { ...b, id: newId() }])}
-            onDeleteBudget={(id) => setBudgets((prev) => prev.filter((x) => x.id !== id))}
+          <AddExpenseScreen
+            prefill={route.prefill ?? null}
+            editing={editing}
+            groups={groups}
+            presetGroupId={route.presetGroupId ?? null}
+            onSave={(draft) => {
+              saveExpense(draft, editing?.id ?? null);
+              navigate(returnTo);
+            }}
+            onCancel={() => navigate(returnTo)}
           />
         );
-      case 'tracked':
-        return (
-          <TrackedItemsScreen
-            documents={documents}
-            onAddManual={(cat) => navigate({ name: 'review', prefill: blankPrefill(cat) })}
-            onAddScan={(cat) => navigate({ name: 'documents', autoScan: true, intendedCategory: cat })}
-          />
-        );
+      }
       case 'groups':
         return (
           <GroupsScreen
-            groups={groups}
             expenses={expenses}
+            groups={groups}
             settlements={settlements}
             onOpenGroup={(groupId) => navigate({ name: 'group', groupId })}
             onCreateGroup={(g) => {
               const id = newId();
-              setGroups((prev) => [...prev, { ...g, id }]);
+              setGroups((prev) => [...prev, { ...g, id, createdAt: Date.now() }]);
               navigate({ name: 'group', groupId: id });
             }}
           />
         );
       case 'group': {
         const group = groups.find((g) => g.id === route.groupId);
-        if (!group) {
-          return <View style={styles.content} />;
-        }
-        const prefillReceipt = route.prefillDocId
-          ? documents.find((d) => d.id === route.prefillDocId) ?? null
-          : null;
+        if (!group) return <View style={styles.content} />;
         return (
           <GroupDetailScreen
             group={group}
             expenses={expenses.filter((e) => e.groupId === group.id)}
             settlements={settlements.filter((s) => s.groupId === group.id)}
-            receiptDocs={documents.filter((d) => d.category === 'bills_receipts' && d.totalCents != null)}
-            prefillReceipt={prefillReceipt}
-            onAddExpense={(e) => setExpenses((prev) => [{ ...e, id: newId(), createdAt: Date.now() }, ...prev])}
-            onUpdateExpense={(id, patch) => setExpenses((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)))}
+            onAddExpense={() => navigate({ name: 'add', presetGroupId: group.id, returnTo: { name: 'group', groupId: group.id } })}
+            onEditExpense={(e) => navigate({ name: 'add', editing: e, returnTo: { name: 'group', groupId: group.id } })}
             onDeleteExpense={(id) => setExpenses((prev) => prev.filter((e) => e.id !== id))}
             onRecordSettlement={(s) => setSettlements((prev) => [{ ...s, id: newId(), createdAt: Date.now() }, ...prev])}
           />
         );
       }
-      case 'business':
+      case 'reports':
         return (
-          <BusinessScreen
-            businessProfile={businessProfile}
-            invoices={invoices}
-            clients={clients}
-            businessExpenses={businessExpenses}
+          <ReportsScreen
+            expenses={expenses}
+            budgets={budgets}
             mileage={mileage}
-            onOpenInvoices={() => navigate({ name: 'invoices' })}
-            onOpenClients={() => navigate({ name: 'clients' })}
-            onOpenGST={() => navigate({ name: 'gst' })}
+            onAddBudget={(b) => setBudgets((prev) => [...prev, { ...b, id: newId() }])}
+            onDeleteBudget={(id) => setBudgets((prev) => prev.filter((x) => x.id !== id))}
             onOpenMileage={() => navigate({ name: 'mileage' })}
-            onOpenExpenses={() => navigate({ name: 'analytics' })}
-          />
-        );
-      case 'invoices':
-        return (
-          <InvoicesScreen
-            invoices={invoices}
-            clients={clients}
-            businessProfile={businessProfile}
-            onCreate={(inv) => setInvoices((prev) => [{ ...inv, id: newId(), createdAt: Date.now() }, ...prev])}
-            onUpdateStatus={(id, status: InvoiceStatus) =>
-              setInvoices((prev) => prev.map((iv) => (iv.id === id ? { ...iv, status } : iv)))
-            }
-            onDelete={(id) => setInvoices((prev) => prev.filter((iv) => iv.id !== id))}
-            onOpenClients={() => navigate({ name: 'clients' })}
-          />
-        );
-      case 'clients':
-        return (
-          <ClientsScreen
-            clients={clients}
-            invoices={invoices}
-            onCreate={(c) => setClients((prev) => [{ ...c, id: newId(), createdAt: Date.now() }, ...prev])}
-            onDelete={(id) => setClients((prev) => prev.filter((c) => c.id !== id))}
-          />
-        );
-      case 'gst':
-        return (
-          <GSTScreen
-            businessExpenses={businessExpenses}
-            invoices={invoices}
-            businessProfile={businessProfile}
-            onAddExpense={(e) => setBusinessExpenses((prev) => [{ ...e, id: newId(), createdAt: Date.now() }, ...prev])}
-            onDeleteExpense={(id) => setBusinessExpenses((prev) => prev.filter((x) => x.id !== id))}
           />
         );
       case 'mileage':
@@ -388,19 +234,14 @@ export default function App() {
             onDelete={(id) => setMileage((prev) => prev.filter((t) => t.id !== id))}
           />
         );
-      case 'profile':
+      case 'account':
         return user ? (
-          <ProfileScreen
+          <AccountScreen
             user={user}
-            mode={mode}
-            onSetMode={setMode}
-            businessProfile={businessProfile}
-            onSaveBusinessProfile={(p) => setBusinessProfile(p)}
-            documentsCount={documents.length}
-            trackedCount={documents.filter((d) => d.category === 'warranty' || d.category === 'loyalty').length}
-            groupsCount={groups.length}
-            invoicesCount={invoices.length}
-            clientsCount={clients.length}
+            expenseCount={expenses.length}
+            groupCount={groups.length}
+            onOpenReports={() => navigate({ name: 'reports' })}
+            onOpenMileage={() => navigate({ name: 'mileage' })}
             onSignOut={() => {
               saveUser(null);
               setUser(null);
@@ -411,9 +252,16 @@ export default function App() {
       default:
         return null;
     }
-  }, [route, mode, documents, transactions, incomes, budgets, groups, expenses, settlements, businessProfile, clients, invoices, mileage, businessExpenses, navigate, addDocument, setMode, user]);
+  }, [route, expenses, groups, settlements, mileage, budgets, user, navigate, saveExpense]);
 
-  const headerTitle = route.name === 'group' ? groups.find((g) => g.id === route.groupId)?.name ?? 'Group' : TITLES[route.name];
+  const headerTitle =
+    route.name === 'group'
+      ? groups.find((g) => g.id === route.groupId)?.name ?? 'Group'
+      : route.name === 'add'
+      ? route.editing
+        ? 'Edit expense'
+        : 'Add expense'
+      : TITLES[route.name];
 
   if (loaded && !user) {
     return (
@@ -421,15 +269,12 @@ export default function App() {
         <View style={styles.phone}>
           <LoginScreen
             onSignIn={(u) => {
-              const withMode: WebUser = { ...u, mode: 'personal' };
-              saveUser(withMode);
-              setUser(withMode);
+              saveUser(u);
+              setUser(u);
             }}
           />
         </View>
-        <Text style={styles.caption}>
-          Web preview of the Document Tracker Android app · camera &amp; cloud OCR are stubbed here
-        </Text>
+        <Text style={styles.caption}>Web preview · camera &amp; cloud OCR are stubbed here</Text>
       </View>
     );
   }
@@ -454,32 +299,29 @@ export default function App() {
         {showTabBar ? (
           <TabBar
             active={activeTab}
-            mode={mode}
             onNavigate={(tab) => navigate({ name: tab } as Route)}
-            onScan={() => navigate({ name: 'documents', autoScan: true })}
+            onScan={() => navigate({ name: 'scan' })}
           />
         ) : null}
       </View>
-      <Text style={styles.caption}>
-        Web preview of the Document Tracker Android app · camera &amp; cloud OCR are stubbed here
-      </Text>
+      <Text style={styles.caption}>Web preview · camera &amp; cloud OCR are stubbed here</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#eceff3', padding: 16 },
+  page: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#e7ecec', padding: 16 },
   phone: {
     width: 400,
     maxWidth: '100%',
     height: 820,
     maxHeight: '92%',
-    backgroundColor: COLORS.bg,
+    backgroundColor: COLORS.screenBg,
     borderRadius: 28,
     overflow: 'hidden',
-    boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
+    boxShadow: '0 20px 60px rgba(20,40,60,0.18)',
     borderWidth: 1,
-    borderColor: '#dfe3e8',
+    borderColor: '#dfe6e6',
   } as object,
   header: {
     height: 56,
@@ -495,5 +337,5 @@ const styles = StyleSheet.create({
   backText: { color: COLORS.primary, fontSize: 16, fontWeight: '600' },
   headerTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text },
   content: { flex: 1 },
-  caption: { marginTop: 14, color: '#8a94a6', fontSize: 13 },
+  caption: { marginTop: 14, color: '#8a99a0', fontSize: 13 },
 });
