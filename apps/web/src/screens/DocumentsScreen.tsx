@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   detectImei,
@@ -18,9 +18,8 @@ import type { ReviewPrefill } from '../App';
 interface Props {
   documents: WebDocument[];
   groups: WebGroup[];
+  autoOpenScan?: boolean;
   onReview: (prefill: ReviewPrefill) => void;
-  onOpenAnalytics: () => void;
-  onOpenTracked: () => void;
   onOpenGroups: () => void;
   onSplitToGroup: (groupId: string, docId: string) => void;
 }
@@ -68,9 +67,8 @@ function FileInput({ onPick, disabled }: { onPick: (file: File) => void; disable
 export default function DocumentsScreen({
   documents,
   groups,
+  autoOpenScan,
   onReview,
-  onOpenAnalytics,
-  onOpenTracked,
   onOpenGroups,
   onSplitToGroup,
 }: Props) {
@@ -81,6 +79,13 @@ export default function DocumentsScreen({
   const [pct, setPct] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [splitDoc, setSplitDoc] = useState<WebDocument | null>(null);
+
+  // Opened via the tab-bar scan button.
+  useEffect(() => {
+    if (autoOpenScan) {
+      setScanning(true);
+    }
+  }, [autoOpenScan]);
 
   function reset() {
     setScanning(false);
@@ -246,18 +251,6 @@ export default function DocumentsScreen({
           </View>
         </View>
       ) : null}
-
-      <View style={styles.footer}>
-        <Pressable style={styles.secondary} onPress={onOpenAnalytics}>
-          <Text style={styles.secondaryText}>Spending</Text>
-        </Pressable>
-        <Pressable style={styles.secondary} onPress={onOpenTracked}>
-          <Text style={styles.secondaryText}>Tracked</Text>
-        </Pressable>
-        <Pressable style={styles.secondary} onPress={onOpenGroups}>
-          <Text style={styles.secondaryText}>Groups</Text>
-        </Pressable>
-      </View>
     </View>
   );
 }

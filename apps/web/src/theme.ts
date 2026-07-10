@@ -1,15 +1,21 @@
 export const COLORS = {
   bg: '#ffffff',
-  screenBg: '#f6f8fa',
-  primary: '#1f6feb',
-  text: '#111827',
-  subtext: '#6b7280',
-  border: '#e5e7eb',
-  chip: '#eef1f5',
+  screenBg: '#f5f7fb',
+  primary: '#1d4ed8',
+  text: '#0f172a',
+  subtext: '#64748b',
+  border: '#e7ebf2',
+  chip: '#eef1f6',
   danger: '#b42318',
-  success: '#067647',
-  warnBg: '#fff7ed',
-  warnText: '#9a3412',
+  success: '#059669',
+  warnBg: '#fef0e0',
+  warnText: '#b45309',
+  // Fintech direction tokens
+  navyA: '#14213d',
+  navyB: '#0b1220',
+  good: '#059669',
+  warn: '#b45309',
+  info: '#2563eb',
 };
 
 export const CATEGORY_LABEL: Record<string, string> = {

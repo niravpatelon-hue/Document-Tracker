@@ -17,12 +17,14 @@ import {
   type WebTransaction,
 } from './store';
 import { seedState } from './seed';
+import HomeScreen from './screens/HomeScreen';
 import DocumentsScreen from './screens/DocumentsScreen';
 import ReviewScreen from './screens/ReviewScreen';
 import SpendAnalysisScreen from './screens/SpendAnalysisScreen';
 import TrackedItemsScreen from './screens/TrackedItemsScreen';
 import GroupsScreen from './screens/GroupsScreen';
 import GroupDetailScreen from './screens/GroupDetailScreen';
+import TabBar, { type TabKey } from './components/TabBar';
 
 export interface ReviewPrefill {
   category: DocumentCategory;
@@ -40,24 +42,27 @@ export interface ReviewPrefill {
 }
 
 type Route =
-  | { name: 'documents' }
+  | { name: 'home' }
+  | { name: 'documents'; autoScan?: boolean }
   | { name: 'review'; prefill: ReviewPrefill }
   | { name: 'analytics' }
   | { name: 'tracked' }
   | { name: 'groups' }
   | { name: 'group'; groupId: string; prefillDocId?: string };
 
-const TITLES: Record<Route['name'], string> = {
+const TITLES: Record<string, string> = {
   documents: 'Documents',
   review: 'Review & Save',
   analytics: 'Spending',
   tracked: 'Tracked items',
   groups: 'Groups',
-  group: 'Group',
 };
 
+const TAB_ROUTES = new Set(['home', 'analytics', 'groups', 'documents', 'tracked']);
+const BACK_ROUTES = new Set(['review', 'group']);
+
 export default function App() {
-  const [route, setRoute] = useState<Route>({ name: 'documents' });
+  const [route, setRoute] = useState<Route>({ name: 'home' });
   const [documents, setDocuments] = useState<WebDocument[]>([]);
   const [transactions, setTransactions] = useState<WebTransaction[]>([]);
   const [budgets, setBudgets] = useState<WebBudget[]>([]);
@@ -101,19 +106,43 @@ export default function App() {
     [documents],
   );
 
-  const canGoBack = route.name !== 'documents';
-  const goBack = () => navigate(route.name === 'group' ? { name: 'groups' } : { name: 'documents' });
+  const showTabBar = TAB_ROUTES.has(route.name);
+  const showBack = BACK_ROUTES.has(route.name);
+  const showTitle = route.name !== 'home';
+
+  const activeTab: TabKey | null =
+    route.name === 'home'
+      ? 'home'
+      : route.name === 'analytics'
+      ? 'analytics'
+      : route.name === 'groups'
+      ? 'groups'
+      : route.name === 'documents'
+      ? 'documents'
+      : null;
+
+  const goBack = () => navigate(route.name === 'group' ? { name: 'groups' } : { name: 'home' });
 
   const body = useMemo(() => {
     switch (route.name) {
+      case 'home':
+        return (
+          <HomeScreen
+            documents={documents}
+            transactions={transactions}
+            onOpenReceipts={() => navigate({ name: 'documents' })}
+            onOpenWarranty={() => navigate({ name: 'tracked' })}
+            onOpenLoyalty={() => navigate({ name: 'tracked' })}
+            onOpenSpending={() => navigate({ name: 'analytics' })}
+          />
+        );
       case 'documents':
         return (
           <DocumentsScreen
             documents={documents}
             groups={groups}
+            autoOpenScan={route.autoScan}
             onReview={(prefill) => navigate({ name: 'review', prefill })}
-            onOpenAnalytics={() => navigate({ name: 'analytics' })}
-            onOpenTracked={() => navigate({ name: 'tracked' })}
             onOpenGroups={() => navigate({ name: 'groups' })}
             onSplitToGroup={(groupId, docId) => navigate({ name: 'group', groupId, prefillDocId: docId })}
           />
@@ -124,10 +153,10 @@ export default function App() {
             prefill={route.prefill}
             onSave={(input) => {
               if (addDocument(input).length === 0) {
-                navigate({ name: 'documents' });
+                navigate({ name: 'home' });
               }
             }}
-            onCancel={() => navigate({ name: 'documents' })}
+            onCancel={() => navigate({ name: 'home' })}
           />
         );
       case 'analytics':
@@ -170,16 +199,10 @@ export default function App() {
             settlements={settlements.filter((s) => s.groupId === group.id)}
             receiptDocs={documents.filter((d) => d.category === 'bills_receipts' && d.totalCents != null)}
             prefillReceipt={prefillReceipt}
-            onAddExpense={(e) =>
-              setExpenses((prev) => [{ ...e, id: newId(), createdAt: Date.now() }, ...prev])
-            }
-            onUpdateExpense={(id, patch) =>
-              setExpenses((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)))
-            }
+            onAddExpense={(e) => setExpenses((prev) => [{ ...e, id: newId(), createdAt: Date.now() }, ...prev])}
+            onUpdateExpense={(id, patch) => setExpenses((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)))}
             onDeleteExpense={(id) => setExpenses((prev) => prev.filter((e) => e.id !== id))}
-            onRecordSettlement={(s) =>
-              setSettlements((prev) => [{ ...s, id: newId(), createdAt: Date.now() }, ...prev])
-            }
+            onRecordSettlement={(s) => setSettlements((prev) => [{ ...s, id: newId(), createdAt: Date.now() }, ...prev])}
           />
         );
       }
@@ -188,25 +211,32 @@ export default function App() {
     }
   }, [route, documents, transactions, budgets, groups, expenses, settlements, navigate, addDocument]);
 
+  const headerTitle = route.name === 'group' ? groups.find((g) => g.id === route.groupId)?.name ?? 'Group' : TITLES[route.name];
+
   return (
     <View style={styles.page}>
       <View style={styles.phone}>
-        <View style={styles.header}>
-          {canGoBack ? (
-            <Pressable onPress={goBack} style={styles.back}>
-              <Text style={styles.backText}>‹ Back</Text>
-            </Pressable>
-          ) : (
+        {showTitle ? (
+          <View style={styles.header}>
+            {showBack ? (
+              <Pressable onPress={goBack} style={styles.back}>
+                <Text style={styles.backText}>‹ Back</Text>
+              </Pressable>
+            ) : (
+              <View style={styles.back} />
+            )}
+            <Text style={styles.headerTitle}>{headerTitle}</Text>
             <View style={styles.back} />
-          )}
-          <Text style={styles.headerTitle}>
-            {route.name === 'group'
-              ? groups.find((g) => g.id === route.groupId)?.name ?? 'Group'
-              : TITLES[route.name]}
-          </Text>
-          <View style={styles.back} />
-        </View>
+          </View>
+        ) : null}
         <View style={styles.content}>{body}</View>
+        {showTabBar ? (
+          <TabBar
+            active={activeTab}
+            onNavigate={(tab) => navigate({ name: tab } as Route)}
+            onScan={() => navigate({ name: 'documents', autoScan: true })}
+          />
+        ) : null}
       </View>
       <Text style={styles.caption}>
         Web preview of the Document Tracker Android app · camera &amp; cloud OCR are stubbed here
