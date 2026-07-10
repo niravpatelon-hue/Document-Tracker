@@ -34,6 +34,63 @@ export function formatAmount(c: Cents): string {
   return `${sign}${whole}.${frac.toString().padStart(2, '0')}`;
 }
 
+/* -------------------------------------------------------------------------- */
+/*  Indian Rupee (INR) formatting                                             */
+/*                                                                            */
+/*  Amounts are stored as integer paise (minor units, ×100), identical to the */
+/*  "cents" convention above. Display uses the Indian numbering system:       */
+/*  thousands, then lakhs and crores — 1,23,45,678 rather than 12,345,678.    */
+/* -------------------------------------------------------------------------- */
+
+/** Group an integer digit-string with Indian place separators: 1234567 -> "12,34,567". */
+export function groupIndian(intDigits: string): string {
+  const digits = intDigits.replace(/^0+(?=\d)/, '');
+  if (digits.length <= 3) return digits;
+  const last3 = digits.slice(-3);
+  let rest = digits.slice(0, -3);
+  const groups: string[] = [];
+  while (rest.length > 2) {
+    groups.unshift(rest.slice(-2));
+    rest = rest.slice(0, -2);
+  }
+  if (rest.length > 0) groups.unshift(rest);
+  return `${groups.join(',')},${last3}`;
+}
+
+/** Format paise as a full ₹ amount with 2 decimals: 123456789 -> "₹12,34,567.89". */
+export function formatINR(c: Cents): string {
+  const sign = c < 0 ? '-' : '';
+  const abs = Math.abs(c);
+  const whole = Math.floor(abs / 100);
+  const frac = abs % 100;
+  return `${sign}₹${groupIndian(String(whole))}.${frac.toString().padStart(2, '0')}`;
+}
+
+/** Format paise as a whole-rupee ₹ amount (no decimals): 123456789 -> "₹12,34,568". */
+export function formatINRShort(c: Cents): string {
+  const sign = c < 0 ? '-' : '';
+  const whole = Math.round(Math.abs(c) / 100);
+  return `${sign}₹${groupIndian(String(whole))}`;
+}
+
+function trimOneDecimal(n: number): string {
+  const s = n.toFixed(1);
+  return s.endsWith('.0') ? s.slice(0, -2) : s;
+}
+
+/**
+ * Compact ₹ for dashboards / cards using Indian scale words:
+ *   999 -> "₹999", 12345 -> "₹12,345", 150000 -> "₹1.5L", 53000000 -> "₹5.3Cr".
+ */
+export function formatINRCompact(c: Cents): string {
+  const sign = c < 0 ? '-' : '';
+  const rupees = Math.abs(c) / 100;
+  if (rupees >= 1e7) return `${sign}₹${trimOneDecimal(rupees / 1e7)}Cr`;
+  if (rupees >= 1e5) return `${sign}₹${trimOneDecimal(rupees / 1e5)}L`;
+  const rounded = Math.round(rupees);
+  return `${sign}₹${groupIndian(String(rounded))}`;
+}
+
 /**
  * Distribute `total` cents across buckets proportional to `weights`, using the
  * largest-remainder method. Guarantees the returned parts sum EXACTLY to

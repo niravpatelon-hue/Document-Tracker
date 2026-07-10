@@ -1,4 +1,14 @@
-import { allocateEqually, distribute, formatAmount, fromCents, toCents } from './money';
+import {
+  allocateEqually,
+  distribute,
+  formatAmount,
+  formatINR,
+  formatINRCompact,
+  formatINRShort,
+  fromCents,
+  groupIndian,
+  toCents,
+} from './money';
 
 describe('money conversion', () => {
   it('round-trips major units and cents', () => {
@@ -16,6 +26,39 @@ describe('money conversion', () => {
     expect(formatAmount(5)).toBe('0.05');
     expect(formatAmount(10000)).toBe('100.00');
     expect(formatAmount(-1)).toBe('-0.01');
+  });
+});
+
+describe('Indian rupee formatting', () => {
+  it('groups digits in the Indian system (thousand, lakh, crore)', () => {
+    expect(groupIndian('100')).toBe('100');
+    expect(groupIndian('1000')).toBe('1,000');
+    expect(groupIndian('12345')).toBe('12,345');
+    expect(groupIndian('123456')).toBe('1,23,456');
+    expect(groupIndian('1234567')).toBe('12,34,567');
+    expect(groupIndian('12345678')).toBe('1,23,45,678');
+  });
+
+  it('formats paise with ₹, Indian grouping and 2 decimals', () => {
+    expect(formatINR(0)).toBe('₹0.00');
+    expect(formatINR(1250)).toBe('₹12.50');
+    expect(formatINR(100000)).toBe('₹1,000.00');
+    expect(formatINR(12345678)).toBe('₹1,23,456.78');
+    expect(formatINR(-99)).toBe('-₹0.99');
+  });
+
+  it('formats whole-rupee short amounts', () => {
+    expect(formatINRShort(150050)).toBe('₹1,501');
+    expect(formatINRShort(12345678)).toBe('₹1,23,457');
+  });
+
+  it('compacts large amounts with lakh / crore', () => {
+    expect(formatINRCompact(50000)).toBe('₹500');
+    expect(formatINRCompact(1234500)).toBe('₹12,345');
+    expect(formatINRCompact(15000000)).toBe('₹1.5L');
+    expect(formatINRCompact(12345600)).toBe('₹1.2L');
+    expect(formatINRCompact(5300000000)).toBe('₹5.3Cr');
+    expect(formatINRCompact(-15000000)).toBe('-₹1.5L');
   });
 });
 

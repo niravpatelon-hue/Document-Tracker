@@ -40,6 +40,16 @@ export interface WebTransaction {
   dateISO: string;
 }
 
+/** A money-in event (salary, freelance credit, refund…) in paise. Personal mode. */
+export interface WebIncome {
+  id: string;
+  source: string;
+  amountCents: number;
+  dateISO: string;
+  /** How much of this inflow was moved to savings (paise). */
+  savedCents?: number;
+}
+
 export interface CreateDocInput {
   category: DocumentCategory;
   vendor: string | null;
@@ -70,9 +80,20 @@ export interface WebGroupMember {
   upi?: string;
 }
 
+export type AppMode = 'personal' | 'business';
+
 export interface WebUser {
   name: string;
   email: string;
+  /** Which experience the app shows. Defaults to 'personal'. */
+  mode?: AppMode;
+}
+
+/** The signed-in user's own business identity (for invoices / GST). */
+export interface BusinessProfile {
+  name: string;
+  gstin: string;
+  stateName?: string;
 }
 
 export interface ExpensePayer {
@@ -132,13 +153,114 @@ export function categoryIcon(key: string): string {
   return EXPENSE_CATEGORIES.find((c) => c.key === key)?.icon ?? '🧾';
 }
 
+/* -------------------------------------------------------------------------- */
+/*  Business mode entities (GST, invoicing, clients, mileage, expenses)        */
+/* -------------------------------------------------------------------------- */
+
+/** GST slabs used across India. */
+export const GST_RATES = [0, 5, 12, 18, 28] as const;
+export type GstRate = (typeof GST_RATES)[number];
+
+/** input = purchases (eligible for input-tax credit); output = sales. */
+export type GstDirection = 'input' | 'output';
+
+export interface WebClient {
+  id: string;
+  name: string;
+  gstin?: string;
+  email?: string;
+  phone?: string;
+  stateName?: string;
+  createdAt: number;
+}
+
+export interface WebInvoiceItem {
+  description: string;
+  qty: number;
+  /** Per-unit rate in paise (minor units). */
+  rateCents: number;
+  /** GST rate applied to this line, e.g. 18. */
+  taxRatePct: number;
+  hsn?: string;
+}
+
+export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue';
+
+export interface WebInvoice {
+  id: string;
+  number: string;
+  clientId: string;
+  dateISO: string;
+  dueDateISO: string;
+  items: WebInvoiceItem[];
+  status: InvoiceStatus;
+  notes?: string;
+  createdAt: number;
+}
+
+export interface WebMileageTrip {
+  id: string;
+  dateISO: string;
+  purpose: string;
+  /** Free-text "from → to" description. */
+  route: string;
+  km: number;
+  /** Reimbursement rate in paise per km (e.g. 1200 = ₹12/km). */
+  ratePaisePerKm: number;
+  createdAt: number;
+}
+
+/** A business expense (purchase) with GST tracked for input-tax credit. */
+export interface WebBusinessExpense {
+  id: string;
+  vendor: string;
+  category: string;
+  dateISO: string;
+  /** Net / taxable amount in paise (before GST). */
+  amountCents: number;
+  taxRatePct: number;
+  /** Computed GST amount in paise. */
+  gstCents: number;
+  direction: GstDirection;
+  gstin?: string;
+  paymentMethod?: string;
+  notes?: string;
+  imageDataUrl?: string | null;
+  createdAt: number;
+}
+
+/** Business-expense categories (deductible-leaning), with an emoji each. */
+export const BUSINESS_EXPENSE_CATEGORIES: { key: string; icon: string }[] = [
+  { key: 'Office supplies', icon: '🖇️' },
+  { key: 'Software & SaaS', icon: '💻' },
+  { key: 'Travel', icon: '✈️' },
+  { key: 'Meals & entertainment', icon: '🍽️' },
+  { key: 'Rent & utilities', icon: '🏢' },
+  { key: 'Marketing', icon: '📣' },
+  { key: 'Professional fees', icon: '📑' },
+  { key: 'Equipment', icon: '🖨️' },
+  { key: 'Telecom & internet', icon: '📶' },
+  { key: 'Other', icon: '🧾' },
+];
+
+export function businessCategoryIcon(key: string): string {
+  return BUSINESS_EXPENSE_CATEGORIES.find((c) => c.key === key)?.icon ?? '🧾';
+}
+
 export interface PersistedState {
   documents: WebDocument[];
   transactions: WebTransaction[];
+  incomes: WebIncome[];
   budgets: WebBudget[];
   groups: WebGroup[];
   expenses: WebExpense[];
   settlements: WebSettlement[];
+  // Business mode
+  businessProfile: BusinessProfile;
+  clients: WebClient[];
+  invoices: WebInvoice[];
+  mileage: WebMileageTrip[];
+  businessExpenses: WebBusinessExpense[];
 }
 
 const STORAGE_KEY = 'document-tracker-preview-v1';
@@ -274,15 +396,26 @@ function migrateDocument(d: any): WebDocument {
   };
 }
 
+const EMPTY_BUSINESS_PROFILE: BusinessProfile = { name: '', gstin: '' };
+
 /** Normalize a raw parsed blob into a valid PersistedState (backward-compatible). */
 function normalizeState(raw: any): PersistedState {
   return {
     documents: Array.isArray(raw?.documents) ? raw.documents.map(migrateDocument) : [],
     transactions: Array.isArray(raw?.transactions) ? raw.transactions : [],
+    incomes: Array.isArray(raw?.incomes) ? raw.incomes : [],
     budgets: Array.isArray(raw?.budgets) ? raw.budgets : [],
     groups: Array.isArray(raw?.groups) ? raw.groups : [],
     expenses: Array.isArray(raw?.expenses) ? raw.expenses.map(migrateExpense) : [],
     settlements: Array.isArray(raw?.settlements) ? raw.settlements.map(migrateSettlement) : [],
+    businessProfile:
+      raw?.businessProfile && typeof raw.businessProfile === 'object'
+        ? { name: String(raw.businessProfile.name ?? ''), gstin: String(raw.businessProfile.gstin ?? ''), stateName: raw.businessProfile.stateName ? String(raw.businessProfile.stateName) : undefined }
+        : { ...EMPTY_BUSINESS_PROFILE },
+    clients: Array.isArray(raw?.clients) ? raw.clients : [],
+    invoices: Array.isArray(raw?.invoices) ? raw.invoices : [],
+    mileage: Array.isArray(raw?.mileage) ? raw.mileage : [],
+    businessExpenses: Array.isArray(raw?.businessExpenses) ? raw.businessExpenses : [],
   };
 }
 
@@ -310,7 +443,9 @@ export function loadUser(): WebUser | null {
     const raw = localStorage.getItem(USER_KEY);
     if (!raw) return null;
     const u = JSON.parse(raw);
-    return u && typeof u.email === 'string' ? { name: String(u.name ?? ''), email: String(u.email) } : null;
+    if (!u || typeof u.email !== 'string') return null;
+    const mode: AppMode = u.mode === 'business' ? 'business' : 'personal';
+    return { name: String(u.name ?? ''), email: String(u.email), mode };
   } catch {
     return null;
   }
