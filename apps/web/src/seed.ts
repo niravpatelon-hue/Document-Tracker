@@ -124,9 +124,9 @@ export function seedState(): PersistedState {
       name: 'Tahoe Trip',
       type: 'trip',
       members: [
-        { id: 'u_you', name: 'You', venmo: 'you' },
-        { id: 'u_alex', name: 'Alex', venmo: 'alex-rn' },
-        { id: 'u_sam', name: 'Sam', venmo: 'sam-k' },
+        { id: 'u_you', name: 'You', venmo: 'you', upi: 'you@okicici' },
+        { id: 'u_alex', name: 'Alex', venmo: 'alex-rn', upi: 'alex@okhdfc' },
+        { id: 'u_sam', name: 'Sam', venmo: 'sam-k', upi: 'sam@okaxis' },
       ],
     },
   ];

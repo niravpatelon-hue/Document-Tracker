@@ -6,8 +6,10 @@ import {
   buildDocument,
   findDuplicates,
   loadState,
+  loadUser,
   newId,
   saveState,
+  saveUser,
   type CreateDocInput,
   type WebBudget,
   type WebDocument,
@@ -15,6 +17,7 @@ import {
   type WebGroup,
   type WebSettlement,
   type WebTransaction,
+  type WebUser,
 } from './store';
 import { seedState } from './seed';
 import HomeScreen from './screens/HomeScreen';
@@ -24,6 +27,8 @@ import SpendAnalysisScreen from './screens/SpendAnalysisScreen';
 import TrackedItemsScreen from './screens/TrackedItemsScreen';
 import GroupsScreen from './screens/GroupsScreen';
 import GroupDetailScreen from './screens/GroupDetailScreen';
+import LoginScreen from './screens/LoginScreen';
+import ProfileScreen from './screens/ProfileScreen';
 import TabBar, { type TabKey } from './components/TabBar';
 
 export interface ReviewPrefill {
@@ -48,6 +53,7 @@ type Route =
   | { name: 'analytics' }
   | { name: 'tracked' }
   | { name: 'groups' }
+  | { name: 'profile' }
   | { name: 'group'; groupId: string; prefillDocId?: string };
 
 /** A blank prefill for adding an item by hand (no scan). */
@@ -74,9 +80,10 @@ const TITLES: Record<string, string> = {
   analytics: 'Spending',
   tracked: 'Tracked items',
   groups: 'Groups',
+  profile: 'Profile',
 };
 
-const TAB_ROUTES = new Set(['home', 'analytics', 'groups', 'documents', 'tracked']);
+const TAB_ROUTES = new Set(['home', 'analytics', 'groups', 'profile', 'documents', 'tracked']);
 const BACK_ROUTES = new Set(['review', 'group']);
 
 export default function App() {
@@ -87,6 +94,7 @@ export default function App() {
   const [groups, setGroups] = useState<WebGroup[]>([]);
   const [expenses, setExpenses] = useState<WebExpense[]>([]);
   const [settlements, setSettlements] = useState<WebSettlement[]>([]);
+  const [user, setUser] = useState<WebUser | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -97,6 +105,7 @@ export default function App() {
     setGroups(s.groups ?? []);
     setExpenses(s.expenses ?? []);
     setSettlements(s.settlements ?? []);
+    setUser(loadUser());
     setLoaded(true);
   }, []);
 
@@ -135,8 +144,8 @@ export default function App() {
       ? 'analytics'
       : route.name === 'groups'
       ? 'groups'
-      : route.name === 'documents'
-      ? 'documents'
+      : route.name === 'profile'
+      ? 'profile'
       : null;
 
   const goBack = () => navigate(route.name === 'group' ? { name: 'groups' } : { name: 'home' });
@@ -146,6 +155,7 @@ export default function App() {
       case 'home':
         return (
           <HomeScreen
+            userName={user?.name ?? null}
             documents={documents}
             transactions={transactions}
             onOpenReceipts={() => navigate({ name: 'documents' })}
@@ -231,12 +241,44 @@ export default function App() {
           />
         );
       }
+      case 'profile':
+        return user ? (
+          <ProfileScreen
+            user={user}
+            documentsCount={documents.length}
+            trackedCount={documents.filter((d) => d.category === 'warranty' || d.category === 'loyalty').length}
+            groupsCount={groups.length}
+            onSignOut={() => {
+              saveUser(null);
+              setUser(null);
+              navigate({ name: 'home' });
+            }}
+          />
+        ) : null;
       default:
         return null;
     }
-  }, [route, documents, transactions, budgets, groups, expenses, settlements, navigate, addDocument]);
+  }, [route, documents, transactions, budgets, groups, expenses, settlements, navigate, addDocument, user]);
 
   const headerTitle = route.name === 'group' ? groups.find((g) => g.id === route.groupId)?.name ?? 'Group' : TITLES[route.name];
+
+  if (loaded && !user) {
+    return (
+      <View style={styles.page}>
+        <View style={styles.phone}>
+          <LoginScreen
+            onSignIn={(u) => {
+              saveUser(u);
+              setUser(u);
+            }}
+          />
+        </View>
+        <Text style={styles.caption}>
+          Web preview of the Document Tracker Android app · camera &amp; cloud OCR are stubbed here
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.page}>

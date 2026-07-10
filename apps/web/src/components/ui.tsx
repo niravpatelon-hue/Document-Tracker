@@ -57,10 +57,10 @@ export function Icon({
 /** ---- Category visual mapping (icon + chip colors) ---- */
 export function categoryVisual(category: string): { icon: IconName; bg: string; fg: string } {
   switch (category) {
-    case 'bills_receipts': return { icon: 'receipt', bg: '#e0e7ff', fg: '#4f46e5' };
+    case 'bills_receipts': return { icon: 'receipt', bg: COLORS.accentSoft, fg: COLORS.primary };
     case 'warranty': return { icon: 'shield', bg: '#fef0e0', fg: '#d97706' };
-    case 'loyalty': return { icon: 'star', bg: '#e6f6ee', fg: '#059669' };
-    default: return { icon: 'doc', bg: '#eef1f6', fg: '#64748b' };
+    case 'loyalty': return { icon: 'star', bg: '#e6f6ee', fg: COLORS.good };
+    default: return { icon: 'doc', bg: COLORS.chip, fg: COLORS.subtext };
   }
 }
 

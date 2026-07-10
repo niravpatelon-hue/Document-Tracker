@@ -3,7 +3,7 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import type { DocumentCategory } from '@domain/ocr/fieldparser';
 import { fromCents, toCents } from '@domain/money';
 import { COLORS } from '../theme';
-import { Card, Icon } from '../components/ui';
+import { Card, Icon, IconChip, categoryVisual } from '../components/ui';
 import type { CreateDocInput } from '../store';
 import type { ReviewPrefill } from '../App';
 
@@ -40,9 +40,11 @@ export default function ReviewScreen({ prefill, onSave, onCancel }: Props) {
   const [programType, setProgramType] = useState('retail');
   const [balance, setBalance] = useState('');
   const [expiryDate, setExpiryDate] = useState('');
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fromScan = prefill.ocrMode !== 'manual';
+  const visual = categoryVisual(category);
   const identifierType = prefill.imei ? 'imei' : 'serial_number';
 
   function fail(msg: string) {
@@ -111,17 +113,29 @@ export default function ReviewScreen({ prefill, onSave, onCancel }: Props) {
       ) : null}
 
       <Card>
-        <Text style={styles.label}>Category</Text>
-        <View style={styles.chips}>
-          {CATEGORIES.map((c) => {
-            const active = category === c.key;
-            return (
-              <Pressable key={c.key} style={[styles.chip, active && styles.chipActive]} onPress={() => setCategory(c.key)}>
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>{c.label}</Text>
-              </Pressable>
-            );
-          })}
+        <View style={styles.catHeader}>
+          <IconChip name={visual.icon} bg={visual.bg} fg={visual.fg} size={40} />
+          <View style={styles.catHeaderText}>
+            <Text style={styles.catHeaderLabel}>Category</Text>
+            <Text style={styles.catHeaderValue}>{CATEGORIES.find((c) => c.key === category)?.label}</Text>
+          </View>
+          <Pressable onPress={() => setShowCategoryPicker((s) => !s)} hitSlop={8}>
+            <Text style={styles.changeLink}>{showCategoryPicker ? 'Done' : 'Change'}</Text>
+          </Pressable>
         </View>
+
+        {showCategoryPicker && (
+          <View style={styles.chips}>
+            {CATEGORIES.map((c) => {
+              const active = category === c.key;
+              return (
+                <Pressable key={c.key} style={[styles.chip, active && styles.chipActive]} onPress={() => { setCategory(c.key); setShowCategoryPicker(false); }}>
+                  <Text style={[styles.chipText, active && styles.chipTextActive]}>{c.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
 
         {category === 'bills_receipts' && (
           <>
@@ -190,11 +204,16 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.screenBg },
   scroll: { padding: 16, paddingBottom: 28 },
   image: { width: '100%', height: 150, borderRadius: 12, marginBottom: 12, resizeMode: 'cover' },
-  note: { backgroundColor: '#eef6ff', borderWidth: 1, borderColor: '#dbeafe', borderRadius: 12, padding: 12, marginBottom: 12 },
-  noteText: { color: '#1e40af', fontSize: 13, lineHeight: 18 },
+  note: { backgroundColor: COLORS.accentSoft, borderWidth: 1, borderColor: COLORS.accentSoft, borderRadius: 12, padding: 12, marginBottom: 12 },
+  noteText: { color: COLORS.primary, fontSize: 13, lineHeight: 18 },
   bold: { fontWeight: '800' },
   label: { fontSize: 13, fontWeight: '600', color: COLORS.subtext, marginBottom: 6, marginTop: 2 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  catHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
+  catHeaderText: { flex: 1, marginLeft: 12 },
+  catHeaderLabel: { fontSize: 12, fontWeight: '600', color: COLORS.subtext },
+  catHeaderValue: { fontSize: 16, fontWeight: '700', color: COLORS.text, marginTop: 1 },
+  changeLink: { color: COLORS.primary, fontWeight: '700', fontSize: 14 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: COLORS.chip },
   chipSm: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, backgroundColor: COLORS.chip },
   chipActive: { backgroundColor: COLORS.primary },

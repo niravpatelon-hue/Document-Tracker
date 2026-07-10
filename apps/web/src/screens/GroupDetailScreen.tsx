@@ -139,16 +139,26 @@ export default function GroupDetailScreen({
             <Text style={styles.empty}>Everyone is settled.</Text>
           ) : (
             transfers.map((t, i) => {
-              const link = buildSettleUpLink({ provider: 'venmo', username: venmoOf(t.to) }, { amount: t.amount, note: group.name });
+              const toMember = group.members.find((m) => m.id === t.to);
+              const venmoLink = buildSettleUpLink({ provider: 'venmo', username: venmoOf(t.to) }, { amount: t.amount, note: group.name });
+              const upiLink = toMember?.upi
+                ? buildSettleUpLink({ provider: 'upi', vpa: toMember.upi, payeeName: toMember.name }, { amount: t.amount, note: group.name })
+                : null;
+              const openLink = (url: string) => { try { window.open(url, '_blank'); } catch { /* no-op */ } };
               return (
                 <View key={i} style={styles.settle}>
                   <Text style={styles.settleText}>
                     {nameOf(t.from)} → {nameOf(t.to)} <Text style={styles.bold}>${formatAmount(t.amount)}</Text>
                   </Text>
                   <View style={styles.settleBtns}>
-                    <Pressable style={styles.venmo} onPress={() => { try { window.open(link, '_blank'); } catch { /* no-op */ } }}>
+                    <Pressable style={styles.venmo} onPress={() => openLink(venmoLink)}>
                       <Text style={styles.venmoText}>Venmo</Text>
                     </Pressable>
+                    {upiLink ? (
+                      <Pressable style={styles.upi} onPress={() => openLink(upiLink)}>
+                        <Text style={styles.upiText}>UPI</Text>
+                      </Pressable>
+                    ) : null}
                     <Pressable style={styles.markBtn} onPress={() => onRecordSettlement({ groupId: group.id, fromUser: t.from, toUser: t.to, amount: t.amount })}>
                       <Text style={styles.markText}>Mark settled</Text>
                     </Pressable>
@@ -273,6 +283,8 @@ const styles = StyleSheet.create({
   settleBtns: { flexDirection: 'row', gap: 8, marginTop: 8 },
   venmo: { backgroundColor: '#008CFF', borderRadius: 8, paddingVertical: 7, paddingHorizontal: 14 },
   venmoText: { color: '#fff', fontWeight: '700' },
+  upi: { backgroundColor: '#5f259f', borderRadius: 8, paddingVertical: 7, paddingHorizontal: 14 },
+  upiText: { color: '#fff', fontWeight: '700' },
   markBtn: { backgroundColor: COLORS.chip, borderRadius: 8, paddingVertical: 7, paddingHorizontal: 14 },
   markText: { color: COLORS.text, fontWeight: '700' },
   payRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },

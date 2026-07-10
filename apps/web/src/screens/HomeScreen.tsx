@@ -13,6 +13,7 @@ import { COLORS } from '../theme';
 import type { WebDocument, WebTransaction } from '../store';
 
 interface Props {
+  userName: string | null;
   documents: WebDocument[];
   transactions: WebTransaction[];
   onOpenReceipts: () => void;
@@ -81,6 +82,7 @@ function buildSpark(values: number[], w: number, h: number) {
 }
 
 export default function HomeScreen({
+  userName,
   documents,
   transactions,
   onOpenReceipts,
@@ -89,6 +91,7 @@ export default function HomeScreen({
   onOpenSpending,
 }: Props) {
   const today = todayISO();
+  const firstName = userName ? userName.trim().split(/\s+/)[0] : null;
 
   const spendTxns: SpendTxn[] = useMemo(
     () => transactions.map((t) => ({ amount: t.amount, category: classifySpendCategory(t.vendor), dateISO: t.dateISO, vendor: t.vendor })),
@@ -122,7 +125,7 @@ export default function HomeScreen({
     <ScrollView style={styles.container} contentContainerStyle={styles.scroll}>
       <View style={styles.top}>
         <Text style={styles.hi}>
-          Hi there <Text style={styles.hiMonth}>· {monthLabel}</Text>
+          Hi {firstName ?? 'there'} <Text style={styles.hiMonth}>· {monthLabel}</Text>
         </Text>
         <View style={styles.bell}>
           <svg {...strokeCommon} stroke="#334155" width={17} height={17}>
@@ -162,8 +165,8 @@ export default function HomeScreen({
       <View style={styles.grid}>
         <Tile
           onPress={onOpenReceipts}
-          chipBg="#e0e7ff"
-          icon={<TileIcon kind="receipt" color="#4f46e5" />}
+          chipBg={COLORS.accentSoft}
+          icon={<TileIcon kind="receipt" color={COLORS.primary} />}
           title="Bills & Receipts"
           sub={`${receipts.length} documents`}
         />

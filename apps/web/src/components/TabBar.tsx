@@ -2,7 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { COLORS } from '../theme';
 
-export type TabKey = 'home' | 'analytics' | 'groups' | 'documents';
+export type TabKey = 'home' | 'analytics' | 'groups' | 'profile';
 
 interface Props {
   active: TabKey | null;
@@ -44,11 +44,11 @@ function Icon({ name, color, size = 22 }: { name: TabKey | 'scan'; color: string
           <path d="M3 20c0-3 3-5 6-5s6 2 6 5" />
         </svg>
       );
-    case 'documents':
+    case 'profile':
       return (
         <svg {...common}>
-          <path d="M6 3h9l4 4v14l-2-1-2 1-2-1-2 1-2-1-2 1V3z" />
-          <path d="M8 9h7M8 13h5" />
+          <circle cx="12" cy="8" r="4" />
+          <path d="M4 21c0-4 4-6 8-6s8 2 8 6" />
         </svg>
       );
     case 'scan':
@@ -67,7 +67,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'home', label: 'Home' },
   { key: 'analytics', label: 'Spending' },
   { key: 'groups', label: 'Groups' },
-  { key: 'documents', label: 'Docs' },
+  { key: 'profile', label: 'Profile' },
 ];
 
 export default function TabBar({ active, onNavigate, onScan }: Props) {

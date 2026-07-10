@@ -66,6 +66,13 @@ export interface WebGroupMember {
   id: string;
   name: string;
   venmo?: string;
+  /** UPI VPA (id@bank) for UPI settle-up deep links. */
+  upi?: string;
+}
+
+export interface WebUser {
+  name: string;
+  email: string;
 }
 
 export interface ExpensePayer {
@@ -293,5 +300,27 @@ export function saveState(state: PersistedState): void {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
     // Non-fatal in a preview (e.g. storage disabled).
+  }
+}
+
+const USER_KEY = 'document-tracker-user-v1';
+
+export function loadUser(): WebUser | null {
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    if (!raw) return null;
+    const u = JSON.parse(raw);
+    return u && typeof u.email === 'string' ? { name: String(u.name ?? ''), email: String(u.email) } : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveUser(user: WebUser | null): void {
+  try {
+    if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
+    else localStorage.removeItem(USER_KEY);
+  } catch {
+    /* ignore */
   }
 }
