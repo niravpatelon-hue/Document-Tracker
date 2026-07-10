@@ -67,6 +67,8 @@ export interface Expense {
   taxCents?: number | null;
   /** null => a personal expense; otherwise the group it is shared in. */
   groupId: string | null;
+  /** Payment source — the credit card this was paid with (optional). */
+  cardId?: string | null;
   /** Who paid, and how much (supports multiple payers). */
   paidBy: Payment[];
   /** Members who share this expense. */
@@ -110,6 +112,8 @@ export type CardNetwork = 'visa' | 'mastercard' | 'rupay' | 'amex';
 export interface CreditCard {
   id: string;
   name: string;
+  /** Issuing bank, e.g. "HDFC Bank". */
+  issuer?: string;
   network: CardNetwork;
   last4: string;
   limitCents: number;
@@ -117,10 +121,16 @@ export interface CreditCard {
   outstandingCents: number;
   /** Total due on the latest statement (may be <= outstanding). */
   statementCents?: number;
+  /** Minimum amount due this cycle (paise); derived if omitted. */
+  minDueCents?: number;
   /** Next payment due date, ISO. */
   dueDateISO: string;
+  /** Statement generation date, ISO. */
+  statementDateISO?: string;
   /** Annual interest rate percentage (for optimize hints). */
   apr?: number;
+  /** Reward coins earned per ₹100 paid (default 1). */
+  rewardRate?: number;
   color?: string;
   createdAt: number;
 }
@@ -195,6 +205,8 @@ export interface PersistedState {
   budgets: Budget[];
   cards: CreditCard[];
   cardPayments: CardPayment[];
+  /** Redeemable reward coins earned on card bill payments. */
+  rewardCoins: number;
 }
 
 const STORAGE_KEY = 'expense-split-app-v2';
@@ -208,7 +220,7 @@ export function newId(): string {
 }
 
 export function emptyState(): PersistedState {
-  return { expenses: [], groups: [], settlements: [], mileage: [], budgets: [], cards: [], cardPayments: [] };
+  return { expenses: [], groups: [], settlements: [], mileage: [], budgets: [], cards: [], cardPayments: [], rewardCoins: 0 };
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -238,6 +250,7 @@ function migrateExpense(e: any, i: number): Expense {
     rawText: e?.rawText ?? null,
     taxCents: e?.taxCents != null ? Number(e.taxCents) : null,
     groupId: e?.groupId ?? null,
+    cardId: e?.cardId ?? null,
     paidBy,
     involvedIds,
     splitType: e?.splitType ?? 'equal',
@@ -254,6 +267,7 @@ function normalizeState(raw: any): PersistedState {
     budgets: Array.isArray(raw?.budgets) ? raw.budgets : [],
     cards: Array.isArray(raw?.cards) ? raw.cards : [],
     cardPayments: Array.isArray(raw?.cardPayments) ? raw.cardPayments : [],
+    rewardCoins: Number(raw?.rewardCoins) || 0,
   };
 }
 

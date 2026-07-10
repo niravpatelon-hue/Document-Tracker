@@ -134,14 +134,14 @@ export function seedState(): PersistedState {
 
   const cards: CreditCard[] = [
     {
-      id: 'card-hdfc', name: 'HDFC Regalia', network: 'visa', last4: '4291',
-      limitCents: 50000000, outstandingCents: 8745000, statementCents: 8745000,
-      dueDateISO: '2026-07-18', apr: 42, createdAt: now - DAY * 200,
+      id: 'card-hdfc', name: 'HDFC Regalia', issuer: 'HDFC Bank', network: 'visa', last4: '4291',
+      limitCents: 50000000, outstandingCents: 8745000, statementCents: 8745000, minDueCents: 500000,
+      dueDateISO: '2026-07-18', statementDateISO: '2026-07-03', apr: 42, rewardRate: 2, createdAt: now - DAY * 200,
     },
     {
-      id: 'card-axis', name: 'Axis Ace', network: 'rupay', last4: '7702',
-      limitCents: 20000000, outstandingCents: 14230000, statementCents: 14230000,
-      dueDateISO: '2026-07-14', apr: 40, createdAt: now - DAY * 120,
+      id: 'card-axis', name: 'Axis Ace', issuer: 'Axis Bank', network: 'rupay', last4: '7702',
+      limitCents: 20000000, outstandingCents: 14230000, statementCents: 14230000, minDueCents: 712000,
+      dueDateISO: '2026-07-14', statementDateISO: '2026-06-30', apr: 40, rewardRate: 1, createdAt: now - DAY * 120,
     },
   ];
 
@@ -149,7 +149,17 @@ export function seedState(): PersistedState {
     { id: 'cp-1', cardId: 'card-hdfc', amountCents: 5000000, dateISO: '2026-06-20', note: 'Statement payment', createdAt: now - DAY * 20 },
   ];
 
-  return { expenses, groups, settlements, mileage, budgets, cards, cardPayments };
+  // Attribute a few personal spends to cards so per-card analytics are real.
+  const CARD_OF: Record<string, string> = {
+    'e-amz': 'card-hdfc', 'e-bb': 'card-hdfc', 'e-blinkit': 'card-hdfc',
+    'e-swiggy': 'card-axis', 'e-sbux': 'card-axis',
+  };
+  for (const e of expenses) {
+    const c = CARD_OF[e.id];
+    if (c) e.cardId = c;
+  }
+
+  return { expenses, groups, settlements, mileage, budgets, cards, cardPayments, rewardCoins: 24500 };
 }
 
 /** A realistic receipt blob for the "use sample" scan button — parsed by the real field parser. */

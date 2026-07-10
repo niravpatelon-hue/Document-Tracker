@@ -1,33 +1,48 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { formatINR, formatINRShort, toCents } from '@domain/money';
-import { COLORS } from '../theme';
 import {
-  Button,
-  Card,
-  Field,
-  Icon,
-  Pill,
-  SectionLabel,
-  SegmentBar,
-} from '../components/ui';
-import type { CardNetwork, CardPayment, CreditCard } from '../store';
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import {
+  formatINR,
+  formatINRShort,
+  groupIndian,
+  toCents,
+} from '@domain/money';
+import {
+  daysUntil,
+  estimateCreditScore,
+  minimumDueCents,
+  rewardCoinsFor,
+  scoreBand,
+  summarizeCards,
+} from '@domain/analytics/cards';
+import { CARD_GRADIENTS, DARK } from '../theme';
+import { Icon } from '../components/ui';
+import type { CardNetwork, CardPayment, CreditCard, Expense } from '../store';
 
 interface Props {
   cards: CreditCard[];
   payments: CardPayment[];
+  expenses: Expense[];
+  rewardCoins: number;
+  onOpenCard: (cardId: string) => void;
+  onPayCard: (cardId: string) => void;
   onAddCard: (c: {
     name: string;
-    network: CardNetwork;
+    issuer?: string;
+    network: 'visa' | 'mastercard' | 'rupay' | 'amex';
     last4: string;
     limitCents: number;
     outstandingCents: number;
-    statementCents?: number;
     dueDateISO: string;
-    apr?: number;
   }) => void;
-  onDeleteCard: (id: string) => void;
-  onRecordPayment: (p: { cardId: string; amountCents: number; dateISO: string; note?: string }) => void;
+  onRedeem: (coins: number) => void;
+  onBack: () => void;
 }
 
 const TODAY = new Date().toISOString().slice(0, 10);
@@ -39,396 +54,758 @@ const NETWORKS: { key: CardNetwork; label: string }[] = [
   { key: 'amex', label: 'Amex' },
 ];
 
-const NETWORK_GRADIENT: Record<CardNetwork, [string, string]> = {
-  visa: ['#2563EB', '#1E3A8A'],
-  mastercard: ['#EB4B2A', '#B4341C'],
-  rupay: ['#0B7A3B', '#0A5C2E'],
-  amex: ['#2E7D8A', '#1B5560'],
+const NETWORK_LABEL: Record<CardNetwork, string> = {
+  visa: 'VISA',
+  mastercard: 'MASTERCARD',
+  rupay: 'RUPAY',
+  amex: 'AMEX',
 };
 
-function daysUntil(dateISO: string): number {
-  const due = new Date(dateISO + 'T00:00:00');
-  const today = new Date(TODAY + 'T00:00:00');
-  return Math.round((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+const BAND_LABEL: Record<string, string> = {
+  poor: 'Poor',
+  fair: 'Fair',
+  good: 'Good',
+  excellent: 'Excellent',
+};
+
+const CARD_W = 300;
+const CARD_GAP = 14;
+const SNAP = CARD_W + CARD_GAP;
+
+/* ---- SVG arc helpers (semicircular score gauge) ---- */
+function polar(cx: number, cy: number, r: number, angleDeg: number) {
+  const a = (angleDeg * Math.PI) / 180;
+  return { x: cx + r * Math.cos(a), y: cy - r * Math.sin(a) };
+}
+function arcPath(cx: number, cy: number, r: number, startAngle: number, endAngle: number): string {
+  const start = polar(cx, cy, r, startAngle);
+  const end = polar(cx, cy, r, endAngle);
+  const large = Math.abs(endAngle - startAngle) > 180 ? 1 : 0;
+  const sweep = startAngle > endAngle ? 1 : 0;
+  return `M ${start.x} ${start.y} A ${r} ${r} 0 ${large} ${sweep} ${end.x} ${end.y}`;
 }
 
-function CardVisual({ card }: { card: CreditCard }) {
-  const [c1, c2] = NETWORK_GRADIENT[card.network];
-  return (
-    <View
-      style={[
-        styles.cardVisual,
-        { backgroundImage: `linear-gradient(135deg, ${c1}, ${c2})` } as unknown as object,
-      ]}
-    >
-      <View style={styles.cardVisualTopRow}>
-        <Text style={styles.cardVisualName}>{card.name}</Text>
-        <Text style={styles.cardVisualNetwork}>{card.network.toUpperCase()}</Text>
-      </View>
-      <Text style={styles.cardVisualNumber}>•••• •••• •••• {card.last4}</Text>
-      <View style={styles.cardVisualBottomRow}>
-        <View>
-          <Text style={styles.cardVisualLabel}>Outstanding</Text>
-          <Text style={styles.cardVisualAmount}>{formatINRShort(card.outstandingCents)}</Text>
-        </View>
-        <View style={{ alignItems: 'flex-end' }}>
-          <Text style={styles.cardVisualLabel}>Limit</Text>
-          <Text style={styles.cardVisualAmountSmall}>{formatINRShort(card.limitCents)}</Text>
-        </View>
-      </View>
-    </View>
-  );
+function scoreArc(score: number): string {
+  const f = Math.max(0, Math.min(1, (score - 300) / 600));
+  const end = 180 - f * 180;
+  return arcPath(100, 100, 80, 180, end);
 }
 
-export default function CardsScreen({ cards, payments, onAddCard, onDeleteCard, onRecordPayment }: Props) {
-  const [addingCard, setAddingCard] = useState(false);
+function daysLabel(days: number): string {
+  if (days < 0) return `Overdue ${Math.abs(days)}d`;
+  if (days === 0) return 'Due today';
+  return `Due in ${days} day${days === 1 ? '' : 's'}`;
+}
+
+export default function CardsScreen({
+  cards,
+  payments,
+  expenses,
+  rewardCoins,
+  onOpenCard,
+  onPayCard,
+  onAddCard,
+  onRedeem,
+  onBack,
+}: Props) {
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
+  const [issuer, setIssuer] = useState('');
   const [network, setNetwork] = useState<CardNetwork>('visa');
   const [last4, setLast4] = useState('');
   const [limit, setLimit] = useState('');
   const [outstanding, setOutstanding] = useState('');
   const [dueDateISO, setDueDateISO] = useState(TODAY);
-  const [apr, setApr] = useState('');
 
-  const [payingCardId, setPayingCardId] = useState<string | null>(null);
-  const [payAmount, setPayAmount] = useState('');
-  const [payNote, setPayNote] = useState('');
+  const score = useMemo(
+    () =>
+      estimateCreditScore({
+        cards: cards.map((c) => ({ outstandingCents: c.outstandingCents, limitCents: c.limitCents })),
+        onTimePayments: payments.length,
+        latePayments: 0,
+      }),
+    [cards, payments.length],
+  );
+  const band = useMemo(() => scoreBand(score), [score]);
 
-  const totals = useMemo(() => {
-    const totalOutstanding = cards.reduce((s, c) => s + c.outstandingCents, 0);
-    const totalLimit = cards.reduce((s, c) => s + c.limitCents, 0);
-    const utilPct = totalLimit > 0 ? Math.min(100, Math.round((totalOutstanding / totalLimit) * 100)) : 0;
-    return { totalOutstanding, totalLimit, utilPct };
-  }, [cards]);
+  const summary = useMemo(
+    () =>
+      summarizeCards(
+        cards.map((c) => ({
+          outstandingCents: c.outstandingCents,
+          limitCents: c.limitCents,
+          dueDateISO: c.dueDateISO,
+        })),
+        TODAY,
+      ),
+    [cards],
+  );
+
+  const utilPct = useMemo(() => Math.round(summary.utilization * 100), [summary.utilization]);
+  const utilColor = utilPct >= 70 ? DARK.red : utilPct >= 30 ? DARK.gold : DARK.green;
+  const scoreFactor =
+    summary.utilization < 0.3
+      ? 'Low credit utilization'
+      : 'High utilization is affecting your score';
+
+  const nearestCard = useMemo(() => {
+    if (!summary.nearestDueISO) return null;
+    return cards.find((c) => c.dueDateISO === summary.nearestDueISO) ?? null;
+  }, [cards, summary.nearestDueISO]);
+
+  const nearestPay = nearestCard
+    ? nearestCard.statementCents ?? nearestCard.outstandingCents
+    : 0;
+  const nearestMin = nearestCard
+    ? nearestCard.minDueCents ?? minimumDueCents(nearestCard.outstandingCents)
+    : 0;
 
   const recentPayments = useMemo(
-    () =>
-      payments
-        .slice()
-        .sort((a, b) => b.createdAt - a.createdAt)
-        .slice(0, 20),
+    () => payments.slice().sort((a, b) => b.createdAt - a.createdAt).slice(0, 12),
     [payments],
   );
+
+  // Card cycle spend (from expenses that hit each card) — powers a subtle
+  // "spent this cycle" hint on the active card.
+  const cardSpend = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const e of expenses) {
+      if (e.cardId) map[e.cardId] = (map[e.cardId] ?? 0) + e.amountCents;
+    }
+    return map;
+  }, [expenses]);
 
   function cardName(cardId: string): string {
     return cards.find((c) => c.id === cardId)?.name ?? 'Card';
   }
 
+  const canSave =
+    name.trim().length > 0 && last4.trim().length === 4 && toCents(parseFloat(limit) || 0) > 0;
+
   function resetForm() {
     setName('');
+    setIssuer('');
     setNetwork('visa');
     setLast4('');
     setLimit('');
     setOutstanding('');
     setDueDateISO(TODAY);
-    setApr('');
   }
-
-  function startAddCard() {
-    resetForm();
-    setAddingCard(true);
-  }
-
-  const canSaveCard = name.trim().length > 0 && last4.trim().length === 4 && toCents(parseFloat(limit) || 0) > 0;
 
   function saveCard() {
-    if (!canSaveCard) return;
+    if (!canSave) return;
     onAddCard({
       name: name.trim(),
+      issuer: issuer.trim() || undefined,
       network,
       last4: last4.trim(),
       limitCents: toCents(parseFloat(limit) || 0),
       outstandingCents: toCents(parseFloat(outstanding) || 0),
-      statementCents: undefined,
       dueDateISO: dueDateISO.trim() || TODAY,
-      apr: apr.trim() ? parseFloat(apr) : undefined,
     });
-    setAddingCard(false);
     resetForm();
-  }
-
-  function startPayment(cardId: string) {
-    setPayingCardId(cardId);
-    setPayAmount('');
-    setPayNote('');
-  }
-
-  const canSavePayment = toCents(parseFloat(payAmount) || 0) > 0;
-
-  function savePayment(cardId: string) {
-    if (!canSavePayment) return;
-    onRecordPayment({
-      cardId,
-      amountCents: toCents(parseFloat(payAmount) || 0),
-      dateISO: TODAY,
-      note: payNote.trim() || undefined,
-    });
-    setPayingCardId(null);
-    setPayAmount('');
-    setPayNote('');
-  }
-
-  function handleDelete(id: string) {
-    if (typeof window !== 'undefined' && !window.confirm('Delete this card?')) return;
-    onDeleteCard(id);
+    setAdding(false);
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scroll}>
-      <Text style={styles.screenTitle}>Cards</Text>
-
-      {/* Summary hero */}
-      <Card style={{ marginTop: 14 }}>
-        <SectionLabel>Total outstanding</SectionLabel>
-        <Text style={styles.bigTotal}>{formatINR(totals.totalOutstanding)}</Text>
-        <Text style={styles.heroSub}>of {formatINR(totals.totalLimit)} total limit</Text>
-        <View style={{ marginTop: 12 }}>
-          <SegmentBar
-            segments={[
-              {
-                value: Math.max(1, totals.utilPct),
-                color: totals.utilPct > 70 ? COLORS.danger : totals.utilPct > 30 ? COLORS.warn : COLORS.owed,
-              },
-            ]}
-            height={8}
-          />
+    <View style={styles.root}>
+      {/* 1. Top bar */}
+      <View style={styles.topBar}>
+        <Pressable onPress={onBack} hitSlop={10} style={styles.backBtn}>
+          <View style={styles.chevBack}>
+            <Icon name="chevron" color={DARK.text} size={20} strokeWidth={2.2} />
+          </View>
+        </Pressable>
+        <Text style={styles.topTitle}>Cards</Text>
+        <View style={styles.coinsPill}>
+          <Icon name="sparkles" color={DARK.gold} size={14} strokeWidth={2} />
+          <Text style={styles.coinsPillText}>{groupIndian(String(rewardCoins))} coins</Text>
         </View>
-        <Text style={styles.heroUtilPct}>{totals.utilPct}% utilized</Text>
-      </Card>
-
-      {/* Cards */}
-      <View style={styles.sectionHead}>
-        <SectionLabel>Your cards</SectionLabel>
-        {!addingCard && (
-          <Pressable onPress={startAddCard} hitSlop={8} style={styles.addBtn}>
-            <Icon name="plus" color={COLORS.primary} size={15} strokeWidth={2.4} />
-            <Text style={styles.addBtnText}>Add card</Text>
-          </Pressable>
-        )}
       </View>
 
-      {cards.length === 0 && !addingCard && (
-        <Card>
-          <Text style={styles.empty}>No cards yet. Add one to start tracking payments.</Text>
-        </Card>
-      )}
-
-      {cards.map((card) => {
-        const utilPct = card.limitCents > 0 ? Math.round((card.outstandingCents / card.limitCents) * 100) : 0;
-        const barColor = utilPct > 70 ? COLORS.danger : utilPct > 30 ? COLORS.warn : COLORS.owed;
-        const days = daysUntil(card.dueDateISO);
-        const overdue = days < 0;
-        const isPaying = payingCardId === card.id;
-        return (
-          <Card key={card.id} style={{ marginBottom: 14 }}>
-            <CardVisual card={card} />
-            <View style={{ marginTop: 12 }}>
-              <SegmentBar segments={[{ value: Math.max(1, Math.min(utilPct, 100)), color: barColor }]} height={8} />
-            </View>
-            <View style={styles.cardMetaRow}>
-              <Text style={[styles.cardMetaPct, { color: barColor }]}>{utilPct}% used</Text>
-              <Text style={[styles.cardMetaDue, overdue && { color: COLORS.danger }]}>
-                {overdue ? 'Overdue' : `Due in ${days} day${days === 1 ? '' : 's'}`}
-                {' · '}
-                {card.dueDateISO}
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollBody} showsVerticalScrollIndicator={false}>
+        {/* 2. Credit score */}
+        <View style={styles.scoreCard}>
+          <Text style={styles.eyebrow}>Credit score</Text>
+          <View style={styles.gaugeWrap}>
+            <svg viewBox="0 0 200 116" width={220} height={128}>
+              <defs>
+                <linearGradient id="scoreGrad" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor={DARK.gold} />
+                  <stop offset="100%" stopColor={DARK.green} />
+                </linearGradient>
+              </defs>
+              <path
+                d={arcPath(100, 100, 80, 180, 0)}
+                fill="none"
+                stroke={DARK.border}
+                strokeWidth={14}
+                strokeLinecap="round"
+              />
+              <path
+                d={scoreArc(score)}
+                fill="none"
+                stroke="url(#scoreGrad)"
+                strokeWidth={14}
+                strokeLinecap="round"
+              />
+            </svg>
+            <View style={styles.gaugeCenter} pointerEvents="none">
+              <Text style={styles.scoreValue}>{score}</Text>
+              <Text style={[styles.scoreBand, { color: band === 'poor' ? DARK.red : band === 'fair' ? DARK.gold : DARK.green }]}>
+                {BAND_LABEL[band]}
               </Text>
             </View>
-            {card.apr != null && <Text style={styles.cardApr}>APR {card.apr}%</Text>}
+          </View>
+          <View style={styles.gaugeScaleRow}>
+            <Text style={styles.gaugeScale}>300</Text>
+            <Text style={styles.gaugeScale}>900</Text>
+          </View>
+          <Text style={styles.scoreUpdated}>Updated today</Text>
+          <View style={styles.factorRow}>
+            <View style={[styles.factorDot, { backgroundColor: summary.utilization < 0.3 ? DARK.green : DARK.red }]} />
+            <Text style={styles.factorText}>{scoreFactor}</Text>
+          </View>
+        </View>
 
-            <View style={styles.cardActionsRow}>
-              <Button
-                label={isPaying ? 'Cancel' : 'Pay'}
-                variant={isPaying ? 'ghost' : 'secondary'}
-                onPress={() => (isPaying ? setPayingCardId(null) : startPayment(card.id))}
-                style={{ flex: 1 }}
-              />
-              <Pressable onPress={() => handleDelete(card.id)} hitSlop={8} style={styles.deleteBtn}>
-                <Icon name="trash" color={COLORS.subtext} size={16} />
+        {/* 3. Card stack */}
+        {cards.length > 0 ? (
+          <>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              snapToInterval={SNAP}
+              decelerationRate="fast"
+              contentContainerStyle={styles.stackBody}
+              onScroll={(e) => {
+                const x = e.nativeEvent.contentOffset.x;
+                setActiveIndex(Math.round(x / SNAP));
+              }}
+              scrollEventThrottle={16}
+            >
+              {cards.map((card) => {
+                const [from, to] = CARD_GRADIENTS[card.network] ?? CARD_GRADIENTS.default;
+                const d = daysUntil(TODAY, card.dueDateISO);
+                const urgent = d <= 3;
+                const spent = cardSpend[card.id] ?? 0;
+                return (
+                  <Pressable
+                    key={card.id}
+                    onPress={() => onOpenCard(card.id)}
+                    style={[
+                      styles.cardFace,
+                      { backgroundImage: `linear-gradient(135deg, ${from}, ${to})` } as unknown as object,
+                    ]}
+                  >
+                    <View style={styles.cardTop}>
+                      <View>
+                        <Text style={styles.cardIssuer}>{card.issuer ?? card.name}</Text>
+                        {card.issuer ? <Text style={styles.cardName}>{card.name}</Text> : null}
+                      </View>
+                      <Text style={styles.cardNetwork}>{NETWORK_LABEL[card.network]}</Text>
+                    </View>
+                    <Text style={styles.cardNumber}>{`•••• ${card.last4}`}</Text>
+                    <View style={styles.cardBottom}>
+                      <View>
+                        <Text style={styles.cardFaceLabel}>Outstanding</Text>
+                        <Text style={styles.cardOutstanding}>{formatINRShort(card.outstandingCents)}</Text>
+                        {spent > 0 ? (
+                          <Text style={styles.cardSpent}>{formatINRShort(spent)} spent this cycle</Text>
+                        ) : null}
+                      </View>
+                      <View style={[styles.duePill, urgent && styles.duePillUrgent]}>
+                        <Text style={[styles.dueText, urgent && { color: '#fff' }]}>{daysLabel(d)}</Text>
+                      </View>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            <View style={styles.dots}>
+              {cards.map((c, i) => (
+                <View key={c.id} style={[styles.dot, i === activeIndex && styles.dotActive]} />
+              ))}
+            </View>
+          </>
+        ) : (
+          <View style={styles.emptyStack}>
+            <Icon name="wallet" color={DARK.muted} size={26} />
+            <Text style={styles.emptyStackText}>No cards yet. Add one to start tracking bills and rewards.</Text>
+          </View>
+        )}
+
+        {/* 4. Pay nearest-due card */}
+        {nearestCard ? (
+          <View style={styles.paySection}>
+            <Pressable style={styles.payBtn} onPress={() => onPayCard(nearestCard.id)}>
+              <Text style={styles.payBtnText}>Pay {formatINR(nearestPay)}</Text>
+            </Pressable>
+            <Text style={styles.paySub}>
+              {cardName(nearestCard.id)} · Min due {formatINRShort(nearestMin)} · earn coins
+            </Text>
+          </View>
+        ) : null}
+
+        {/* 5. Total outstanding + utilization */}
+        {cards.length > 0 ? (
+          <View style={styles.utilCard}>
+            <View style={styles.utilRow}>
+              <Text style={styles.utilLabel}>Total outstanding</Text>
+              <Text style={styles.utilTotal}>{formatINR(summary.totalOutstandingCents)}</Text>
+            </View>
+            <View style={styles.utilTrack}>
+              <View style={[styles.utilFill, { width: `${Math.min(100, Math.max(2, utilPct))}%`, backgroundColor: utilColor }]} />
+            </View>
+            <View style={styles.utilRow}>
+              <Text style={[styles.utilPct, { color: utilColor }]}>{utilPct}% utilized</Text>
+              <Text style={styles.utilLimit}>of {formatINRShort(summary.totalLimitCents)} limit</Text>
+            </View>
+          </View>
+        ) : null}
+
+        {/* 6. Rewards */}
+        <View style={styles.rewardsCard}>
+          <View style={styles.rewardsTop}>
+            <View>
+              <Text style={styles.eyebrow}>Rewards</Text>
+              <View style={styles.coinsBalanceRow}>
+                <Icon name="sparkles" color={DARK.gold} size={20} strokeWidth={2} />
+                <Text style={styles.coinsBalance}>{groupIndian(String(rewardCoins))}</Text>
+                <Text style={styles.coinsUnit}>coins</Text>
+              </View>
+            </View>
+            <Pressable style={styles.redeemBtn} onPress={() => onRedeem(500)}>
+              <Text style={styles.redeemText}>Redeem</Text>
+            </Pressable>
+          </View>
+          <View style={styles.offerRow}>
+            <View style={styles.offerTile}>
+              <Icon name="star" color={DARK.gold} size={16} strokeWidth={2} />
+              <Text style={styles.offerText}>Flat ₹500 back on ₹5,000 spend</Text>
+            </View>
+            <View style={styles.offerTile}>
+              <Icon name="sparkles" color={DARK.green} size={16} strokeWidth={2} />
+              <Text style={styles.offerText}>5% back on utility bills</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* 7. Recent payments */}
+        <Text style={styles.sectionTitle}>Recent payments</Text>
+        {recentPayments.length === 0 ? (
+          <View style={styles.emptyPayments}>
+            <Text style={styles.emptyPaymentsText}>No payments yet.</Text>
+          </View>
+        ) : (
+          <View style={styles.timeline}>
+            {recentPayments.map((p, i) => {
+              const coins = rewardCoinsFor(p.amountCents);
+              return (
+                <View key={p.id} style={[styles.tlRow, i > 0 && styles.tlRowBorder]}>
+                  <View style={styles.tlDotCol}>
+                    <View style={styles.tlDot} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.tlName}>{cardName(p.cardId)}</Text>
+                    <Text style={styles.tlDate}>{p.dateISO}</Text>
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={styles.tlAmount}>-{formatINR(p.amountCents)}</Text>
+                    {coins > 0 ? <Text style={styles.tlCoins}>+{groupIndian(String(coins))} coins</Text> : null}
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        {/* 8. Add card */}
+        {!adding ? (
+          <Pressable style={styles.addPill} onPress={() => setAdding(true)}>
+            <Icon name="plus" color={DARK.text} size={16} strokeWidth={2.4} />
+            <Text style={styles.addPillText}>Add card</Text>
+          </Pressable>
+        ) : (
+          <View style={styles.form}>
+            <View style={styles.formHead}>
+              <Text style={styles.sectionTitle}>New card</Text>
+              <Pressable onPress={() => setAdding(false)} hitSlop={8}>
+                <Icon name="x" color={DARK.subtext} size={18} strokeWidth={2.2} />
               </Pressable>
             </View>
 
-            {isPaying && (
-              <View style={styles.payForm}>
-                <Field
-                  label="Amount (Rs)"
-                  value={payAmount}
-                  onChangeText={setPayAmount}
-                  placeholder="1000"
+            <Text style={styles.fieldLabel}>Card name</Text>
+            <TextInput
+              style={styles.input}
+              value={name}
+              onChangeText={setName}
+              placeholder="e.g. Rewards Signature"
+              placeholderTextColor={DARK.muted}
+            />
+
+            <Text style={styles.fieldLabel}>Issuer (optional)</Text>
+            <TextInput
+              style={styles.input}
+              value={issuer}
+              onChangeText={setIssuer}
+              placeholder="e.g. Metro Bank"
+              placeholderTextColor={DARK.muted}
+            />
+
+            <Text style={styles.fieldLabel}>Network</Text>
+            <View style={styles.pillRow}>
+              {NETWORKS.map((n) => {
+                const on = network === n.key;
+                return (
+                  <Pressable
+                    key={n.key}
+                    onPress={() => setNetwork(n.key)}
+                    style={[styles.netPill, on && styles.netPillOn]}
+                  >
+                    <Text style={[styles.netPillText, on && styles.netPillTextOn]}>{n.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <Text style={styles.fieldLabel}>Last 4 digits</Text>
+            <TextInput
+              style={styles.input}
+              value={last4}
+              onChangeText={(t) => setLast4(t.replace(/[^0-9]/g, '').slice(0, 4))}
+              placeholder="1234"
+              placeholderTextColor={DARK.muted}
+              keyboardType="numeric"
+              maxLength={4}
+            />
+
+            <View style={styles.row2}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.fieldLabel}>Credit limit (₹)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={limit}
+                  onChangeText={setLimit}
+                  placeholder="100000"
+                  placeholderTextColor={DARK.muted}
                   keyboardType="decimal-pad"
                 />
-                <Field
-                  label="Note (optional)"
-                  value={payNote}
-                  onChangeText={setPayNote}
-                  placeholder="e.g. Statement payment"
-                  style={{ marginTop: 10 }}
-                />
-                <Button
-                  label="Record payment"
-                  onPress={() => savePayment(card.id)}
-                  disabled={!canSavePayment}
-                  style={{ marginTop: 12 }}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.fieldLabel}>Outstanding (₹)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={outstanding}
+                  onChangeText={setOutstanding}
+                  placeholder="0"
+                  placeholderTextColor={DARK.muted}
+                  keyboardType="decimal-pad"
                 />
               </View>
-            )}
-          </Card>
-        );
-      })}
+            </View>
 
-      {addingCard && (
-        <Card>
-          <SectionLabel>New card</SectionLabel>
-          <Field label="Card name" value={name} onChangeText={setName} placeholder="e.g. HDFC Regalia" />
-          <View style={styles.networkPills}>
-            {NETWORKS.map((n) => (
-              <Pill key={n.key} label={n.label} active={network === n.key} onPress={() => setNetwork(n.key)} />
-            ))}
-          </View>
-          <Field
-            label="Last 4 digits"
-            value={last4}
-            onChangeText={(t) => setLast4(t.replace(/[^0-9]/g, '').slice(0, 4))}
-            placeholder="1234"
-            keyboardType="numeric"
-            style={{ marginTop: 10 }}
-          />
-          <View style={styles.row2}>
-            <Field
-              label="Credit limit (Rs)"
-              value={limit}
-              onChangeText={setLimit}
-              placeholder="100000"
-              keyboardType="decimal-pad"
-              style={{ flex: 1 }}
-            />
-            <Field
-              label="Outstanding (Rs)"
-              value={outstanding}
-              onChangeText={setOutstanding}
-              placeholder="0"
-              keyboardType="decimal-pad"
-              style={{ flex: 1 }}
-            />
-          </View>
-          <View style={styles.row2}>
-            <Field
-              label="Due date (YYYY-MM-DD)"
+            <Text style={styles.fieldLabel}>Due date (YYYY-MM-DD)</Text>
+            <TextInput
+              style={styles.input}
               value={dueDateISO}
               onChangeText={setDueDateISO}
               placeholder={TODAY}
-              style={{ flex: 1 }}
+              placeholderTextColor={DARK.muted}
             />
-            <Field
-              label="APR % (optional)"
-              value={apr}
-              onChangeText={setApr}
-              placeholder="3.5"
-              keyboardType="decimal-pad"
-              style={{ flex: 1 }}
-            />
-          </View>
-          <View style={styles.formActions}>
-            <Button label="Cancel" variant="ghost" onPress={() => setAddingCard(false)} style={{ flex: 1 }} />
-            <Button label="Save card" onPress={saveCard} disabled={!canSaveCard} style={{ flex: 1 }} />
-          </View>
-        </Card>
-      )}
 
-      {/* Recent payments */}
-      <SectionLabel>Recent payments</SectionLabel>
-      {recentPayments.length === 0 ? (
-        <Card>
-          <Text style={styles.empty}>No payments recorded yet.</Text>
-        </Card>
-      ) : (
-        <Card>
-          {recentPayments.map((p: CardPayment, i: number) => (
-            <View key={p.id} style={[styles.paymentRow, i > 0 && styles.paymentRowBorder]}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.paymentCard}>{cardName(p.cardId)}</Text>
-                {p.note && <Text style={styles.paymentNote}>{p.note}</Text>}
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={styles.paymentAmount}>{formatINR(p.amountCents)}</Text>
-                <Text style={styles.paymentDate}>{p.dateISO}</Text>
-              </View>
-            </View>
-          ))}
-        </Card>
-      )}
+            <Pressable style={[styles.saveBtn, !canSave && styles.saveBtnDisabled]} onPress={saveCard} disabled={!canSave}>
+              <Text style={styles.saveBtnText}>Save card</Text>
+            </Pressable>
+          </View>
+        )}
 
-      <View style={{ height: 12 }} />
-    </ScrollView>
+        <View style={{ height: 20 }} />
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.screenBg },
-  scroll: { padding: 16, paddingBottom: 28 },
-  screenTitle: { color: COLORS.ink, fontWeight: '900', fontSize: 22 },
-  bigTotal: { color: COLORS.ink, fontWeight: '900', fontSize: 28, marginTop: 6 },
-  heroSub: { color: COLORS.subtext, fontSize: 12.5, marginTop: 2 },
-  heroUtilPct: { color: COLORS.subtext, fontWeight: '700', fontSize: 12.5, marginTop: 6 },
-  empty: { color: COLORS.subtext, fontSize: 13.5, marginTop: 8 },
+  root: { flex: 1, backgroundColor: DARK.bg },
 
-  sectionHead: {
+  topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 22,
-    marginBottom: 8,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
   },
-  addBtn: {
+  backBtn: { width: 40 },
+  chevBack: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: DARK.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    transform: [{ rotate: '180deg' }],
+    borderWidth: 1,
+    borderColor: DARK.border,
+  },
+  topTitle: { color: DARK.text, fontWeight: '900', fontSize: 18 },
+  coinsPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: COLORS.primarySoft,
+    gap: 5,
+    backgroundColor: DARK.goldSoft,
+    borderWidth: 1,
+    borderColor: 'rgba(231,197,131,0.35)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  coinsPillText: { color: DARK.gold, fontWeight: '800', fontSize: 12 },
+
+  scroll: { flex: 1 },
+  scrollBody: { padding: 16, paddingTop: 6 },
+
+  eyebrow: {
+    color: DARK.subtext,
+    fontWeight: '800',
+    fontSize: 11,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+
+  scoreCard: {
+    backgroundColor: DARK.surface,
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: DARK.border,
+    alignItems: 'center',
+  },
+  gaugeWrap: { width: 220, height: 128, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
+  gaugeCenter: {
+    position: 'absolute',
+    top: 34,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  scoreValue: { color: DARK.text, fontWeight: '900', fontSize: 40, lineHeight: 44 },
+  scoreBand: { fontWeight: '800', fontSize: 14, marginTop: 2 },
+  gaugeScaleRow: { flexDirection: 'row', justifyContent: 'space-between', width: 200, marginTop: -6 },
+  gaugeScale: { color: DARK.muted, fontSize: 11, fontWeight: '700' },
+  scoreUpdated: { color: DARK.muted, fontSize: 11.5, marginTop: 6 },
+  factorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    marginTop: 12,
+    backgroundColor: DARK.surface2,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  factorDot: { width: 8, height: 8, borderRadius: 4 },
+  factorText: { color: DARK.text, fontSize: 12.5, fontWeight: '600' },
+
+  stackBody: { paddingVertical: 18, paddingRight: 16 },
+  cardFace: {
+    width: CARD_W,
+    height: 180,
+    borderRadius: 20,
+    padding: 20,
+    marginRight: CARD_GAP,
+    justifyContent: 'space-between',
+    // subtle premium sheen border handled by gradient; keep elevation-like shadow
+    boxShadow: '0 12px 30px rgba(0,0,0,0.45)' as unknown as undefined,
+  },
+  cardTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  cardIssuer: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  cardName: { color: 'rgba(255,255,255,0.72)', fontWeight: '600', fontSize: 12, marginTop: 2 },
+  cardNetwork: { color: 'rgba(255,255,255,0.9)', fontWeight: '800', fontSize: 12, letterSpacing: 1.5 },
+  cardNumber: { color: '#fff', fontWeight: '700', fontSize: 18, letterSpacing: 3 },
+  cardBottom: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
+  cardFaceLabel: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  cardOutstanding: { color: '#fff', fontWeight: '900', fontSize: 24, marginTop: 2 },
+  cardSpent: { color: 'rgba(255,255,255,0.6)', fontSize: 10.5, marginTop: 3 },
+  duePill: {
+    backgroundColor: 'rgba(255,255,255,0.16)',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 999,
   },
-  addBtnText: { color: COLORS.primary, fontWeight: '800', fontSize: 12 },
+  duePillUrgent: { backgroundColor: DARK.red },
+  dueText: { color: '#fff', fontWeight: '800', fontSize: 11 },
 
-  cardVisual: {
-    height: 180,
-    borderRadius: 18,
-    padding: 18,
-    justifyContent: 'space-between',
-  },
-  cardVisualTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  cardVisualName: { color: '#fff', fontWeight: '800', fontSize: 15 },
-  cardVisualNetwork: { color: 'rgba(255,255,255,0.85)', fontWeight: '800', fontSize: 12, letterSpacing: 1 },
-  cardVisualNumber: { color: '#fff', fontWeight: '700', fontSize: 16, letterSpacing: 2 },
-  cardVisualBottomRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
-  cardVisualLabel: { color: 'rgba(255,255,255,0.75)', fontSize: 10.5, fontWeight: '700', textTransform: 'uppercase' },
-  cardVisualAmount: { color: '#fff', fontWeight: '900', fontSize: 20, marginTop: 2 },
-  cardVisualAmountSmall: { color: '#fff', fontWeight: '800', fontSize: 15, marginTop: 2 },
+  dots: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: -4, marginBottom: 4 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: DARK.border },
+  dotActive: { backgroundColor: DARK.gold, width: 18 },
 
-  cardMetaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },
-  cardMetaPct: { fontWeight: '900', fontSize: 13 },
-  cardMetaDue: { color: COLORS.subtext, fontWeight: '600', fontSize: 12 },
-  cardApr: { color: COLORS.subtext, fontSize: 12, marginTop: 4 },
-
-  cardActionsRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 14 },
-  deleteBtn: {
-    width: 40,
-    height: 40,
+  emptyStack: {
+    backgroundColor: DARK.surface,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: DARK.border,
+    padding: 24,
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 16,
+  },
+  emptyStackText: { color: DARK.subtext, fontSize: 13, textAlign: 'center', lineHeight: 19 },
+
+  paySection: { marginTop: 4 },
+  payBtn: {
+    backgroundColor: DARK.gold,
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    boxShadow: '0 8px 22px rgba(231,197,131,0.25)' as unknown as undefined,
+  },
+  payBtnText: { color: '#1B1205', fontWeight: '900', fontSize: 16 },
+  paySub: { color: DARK.subtext, fontSize: 12, textAlign: 'center', marginTop: 8 },
+
+  utilCard: {
+    backgroundColor: DARK.surface,
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: DARK.border,
+    marginTop: 16,
+  },
+  utilRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  utilLabel: { color: DARK.subtext, fontSize: 12.5, fontWeight: '700' },
+  utilTotal: { color: DARK.text, fontWeight: '900', fontSize: 18 },
+  utilTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: DARK.surface2,
+    overflow: 'hidden',
+    marginVertical: 10,
+  },
+  utilFill: { height: 8, borderRadius: 4 },
+  utilPct: { fontWeight: '800', fontSize: 12.5 },
+  utilLimit: { color: DARK.muted, fontSize: 12 },
+
+  rewardsCard: {
+    backgroundColor: DARK.surface,
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: DARK.border,
+    marginTop: 16,
+  },
+  rewardsTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  coinsBalanceRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 7, marginTop: 6 },
+  coinsBalance: { color: DARK.gold, fontWeight: '900', fontSize: 30, lineHeight: 32 },
+  coinsUnit: { color: DARK.subtext, fontWeight: '700', fontSize: 13, marginBottom: 3 },
+  redeemBtn: {
+    backgroundColor: DARK.goldSoft,
+    borderWidth: 1,
+    borderColor: 'rgba(231,197,131,0.4)',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 999,
+  },
+  redeemText: { color: DARK.gold, fontWeight: '800', fontSize: 13 },
+  offerRow: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  offerTile: {
+    flex: 1,
+    backgroundColor: DARK.surface2,
+    borderRadius: 14,
+    padding: 12,
+    gap: 8,
+  },
+  offerText: { color: DARK.text, fontSize: 12, fontWeight: '600', lineHeight: 17 },
+
+  sectionTitle: { color: DARK.text, fontWeight: '800', fontSize: 15, marginTop: 22, marginBottom: 10 },
+
+  emptyPayments: {
+    backgroundColor: DARK.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: DARK.border,
+    padding: 18,
+  },
+  emptyPaymentsText: { color: DARK.subtext, fontSize: 13 },
+
+  timeline: {
+    backgroundColor: DARK.surface,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: DARK.border,
+    paddingHorizontal: 16,
+  },
+  tlRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 13, gap: 12 },
+  tlRowBorder: { borderTopWidth: 1, borderTopColor: DARK.border },
+  tlDotCol: { width: 10, alignItems: 'center' },
+  tlDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: DARK.green },
+  tlName: { color: DARK.text, fontWeight: '700', fontSize: 14 },
+  tlDate: { color: DARK.muted, fontSize: 11.5, marginTop: 2 },
+  tlAmount: { color: DARK.text, fontWeight: '800', fontSize: 14 },
+  tlCoins: { color: DARK.gold, fontWeight: '700', fontSize: 11.5, marginTop: 2 },
+
+  addPill: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.chip,
+    gap: 7,
+    backgroundColor: DARK.surface2,
+    borderWidth: 1,
+    borderColor: DARK.border,
+    borderRadius: 999,
+    paddingVertical: 14,
+    marginTop: 20,
   },
+  addPillText: { color: DARK.text, fontWeight: '800', fontSize: 14 },
 
-  payForm: { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: COLORS.divider },
-
-  networkPills: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
-  row2: { flexDirection: 'row', gap: 10, marginTop: 10 },
-  formActions: { flexDirection: 'row', gap: 10, marginTop: 16 },
-
-  paymentRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
-  paymentRowBorder: { borderTopWidth: 1, borderTopColor: COLORS.divider },
-  paymentCard: { color: COLORS.ink, fontWeight: '700', fontSize: 14 },
-  paymentNote: { color: COLORS.subtext, fontSize: 12, marginTop: 2 },
-  paymentAmount: { color: COLORS.ink, fontWeight: '800', fontSize: 14 },
-  paymentDate: { color: COLORS.subtext, fontSize: 11.5, marginTop: 2 },
+  form: {
+    backgroundColor: DARK.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: DARK.border,
+    padding: 18,
+    marginTop: 20,
+  },
+  formHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  fieldLabel: { color: DARK.subtext, fontSize: 12, fontWeight: '700', marginTop: 14, marginBottom: 6 },
+  input: {
+    backgroundColor: DARK.surface2,
+    borderWidth: 1,
+    borderColor: DARK.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: DARK.text,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  netPill: {
+    backgroundColor: DARK.surface2,
+    borderWidth: 1,
+    borderColor: DARK.border,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 999,
+  },
+  netPillOn: { backgroundColor: DARK.goldSoft, borderColor: DARK.gold },
+  netPillText: { color: DARK.subtext, fontWeight: '700', fontSize: 12.5 },
+  netPillTextOn: { color: DARK.gold },
+  row2: { flexDirection: 'row', gap: 12 },
+  saveBtn: {
+    backgroundColor: DARK.gold,
+    borderRadius: 14,
+    paddingVertical: 15,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  saveBtnDisabled: { opacity: 0.4 },
+  saveBtnText: { color: '#1B1205', fontWeight: '900', fontSize: 15 },
 });

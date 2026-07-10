@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { rewardCoinsFor } from '@domain/analytics/cards';
 import { COLORS } from './theme';
 import {
   loadState,
@@ -24,6 +25,8 @@ import GroupDetailScreen from './screens/GroupDetailScreen';
 import AnalysisScreen from './screens/AnalysisScreen';
 import OptimizeScreen from './screens/OptimizeScreen';
 import CardsScreen from './screens/CardsScreen';
+import CardDetailScreen from './screens/CardDetailScreen';
+import CardPayScreen from './screens/CardPayScreen';
 import ScanScreen from './screens/ScanScreen';
 import AddExpenseScreen from './screens/AddExpenseScreen';
 import MileageScreen from './screens/MileageScreen';
@@ -51,6 +54,8 @@ type Route =
   | { name: 'analysis' }
   | { name: 'optimize' }
   | { name: 'cards' }
+  | { name: 'cardDetail'; cardId: string }
+  | { name: 'cardPay'; cardId: string; fromDetail?: boolean }
   | { name: 'group'; groupId: string }
   | { name: 'scan' }
   | { name: 'add'; prefill?: ScanPrefill | null; presetGroupId?: string | null; editing?: Expense | null; returnTo?: Route }
@@ -65,9 +70,15 @@ const TITLES: Record<string, string> = {
 };
 
 const TAB_ROUTES = new Set(['home', 'personal', 'groups', 'analysis', 'account']);
-const BACK_ROUTES = new Set(['group', 'scan', 'add', 'optimize', 'cards', 'mileage']);
-// These screens render their own full-width title, so the app chrome omits it.
-const OWN_HEADER = new Set(['home', 'analysis', 'optimize', 'cards']);
+const BACK_ROUTES = new Set(['group', 'scan', 'add', 'optimize', 'mileage']);
+// Screens that render full-bleed with their own top bar — the app chrome is omitted.
+const NO_CHROME = new Set(['home', 'cards', 'cardDetail', 'cardPay']);
+// Screens that render their own title (so the app chrome shows no title text).
+const NO_APP_TITLE = new Set(['home', 'analysis', 'optimize', 'cards', 'cardDetail', 'cardPay']);
+
+function todayISO(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
 export default function App() {
   const [route, setRoute] = useState<Route>({ name: 'home' });
@@ -78,6 +89,7 @@ export default function App() {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [cards, setCards] = useState<CreditCard[]>([]);
   const [cardPayments, setCardPayments] = useState<CardPayment[]>([]);
+  const [rewardCoins, setRewardCoins] = useState(0);
   const [user, setUser] = useState<WebUser | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -90,15 +102,16 @@ export default function App() {
     setBudgets(s.budgets ?? []);
     setCards(s.cards ?? []);
     setCardPayments(s.cardPayments ?? []);
+    setRewardCoins(s.rewardCoins ?? 0);
     setUser(loadUser());
     setLoaded(true);
   }, []);
 
   useEffect(() => {
     if (loaded) {
-      saveState({ expenses, groups, settlements, mileage, budgets, cards, cardPayments });
+      saveState({ expenses, groups, settlements, mileage, budgets, cards, cardPayments, rewardCoins });
     }
-  }, [expenses, groups, settlements, mileage, budgets, cards, cardPayments, loaded]);
+  }, [expenses, groups, settlements, mileage, budgets, cards, cardPayments, rewardCoins, loaded]);
 
   const navigate = useCallback((next: Route) => setRoute(next), []);
 
@@ -110,9 +123,21 @@ export default function App() {
     }
   }, []);
 
-  const showTabBar = TAB_ROUTES.has(route.name);
+  const payCard = useCallback(
+    (cardId: string, amountCents: number) => {
+      const card = cards.find((c) => c.id === cardId);
+      const coins = card ? rewardCoinsFor(amountCents, card.rewardRate ?? 1) : 0;
+      setCardPayments((prev) => [{ id: newId(), cardId, amountCents, dateISO: todayISO(), note: 'Bill payment', createdAt: Date.now() }, ...prev]);
+      setCards((prev) => prev.map((c) => (c.id === cardId ? { ...c, outstandingCents: Math.max(0, c.outstandingCents - amountCents) } : c)));
+      setRewardCoins((rc) => rc + coins);
+    },
+    [cards],
+  );
+
   const showBack = BACK_ROUTES.has(route.name);
-  const showTitle = !OWN_HEADER.has(route.name);
+  const showTabBar = TAB_ROUTES.has(route.name);
+  const showTitle = !NO_APP_TITLE.has(route.name);
+  const headerVisible = !NO_CHROME.has(route.name) && (showTitle || showBack);
 
   const activeTab: TabKey | null =
     route.name === 'home'
@@ -135,6 +160,10 @@ export default function App() {
         return navigate(route.returnTo ?? { name: 'home' });
       case 'mileage':
         return navigate({ name: 'analysis' });
+      case 'cardDetail':
+        return navigate({ name: 'cards' });
+      case 'cardPay':
+        return navigate(route.fromDetail ? { name: 'cardDetail', cardId: route.cardId } : { name: 'cards' });
       default:
         return navigate({ name: 'home' });
     }
@@ -228,17 +257,45 @@ export default function App() {
           <CardsScreen
             cards={cards}
             payments={cardPayments}
+            expenses={expenses}
+            rewardCoins={rewardCoins}
+            onOpenCard={(cardId) => navigate({ name: 'cardDetail', cardId })}
+            onPayCard={(cardId) => navigate({ name: 'cardPay', cardId })}
             onAddCard={(c) => setCards((prev) => [{ ...c, id: newId(), createdAt: Date.now() }, ...prev])}
-            onDeleteCard={(id) => {
-              setCards((prev) => prev.filter((c) => c.id !== id));
-              setCardPayments((prev) => prev.filter((p) => p.cardId !== id));
-            }}
-            onRecordPayment={(p) => {
-              setCardPayments((prev) => [{ ...p, id: newId(), createdAt: Date.now() }, ...prev]);
-              setCards((prev) => prev.map((c) => (c.id === p.cardId ? { ...c, outstandingCents: Math.max(0, c.outstandingCents - p.amountCents) } : c)));
-            }}
+            onRedeem={(coins) => setRewardCoins((rc) => Math.max(0, rc - coins))}
+            onBack={() => navigate({ name: 'home' })}
           />
         );
+      case 'cardDetail': {
+        const card = cards.find((c) => c.id === route.cardId);
+        if (!card) return <View style={styles.content} />;
+        return (
+          <CardDetailScreen
+            card={card}
+            payments={cardPayments.filter((p) => p.cardId === card.id)}
+            expenses={expenses.filter((e) => e.cardId === card.id)}
+            onPay={() => navigate({ name: 'cardPay', cardId: card.id, fromDetail: true })}
+            onDelete={() => {
+              setCards((prev) => prev.filter((c) => c.id !== card.id));
+              setCardPayments((prev) => prev.filter((p) => p.cardId !== card.id));
+              navigate({ name: 'cards' });
+            }}
+            onBack={() => navigate({ name: 'cards' })}
+          />
+        );
+      }
+      case 'cardPay': {
+        const card = cards.find((c) => c.id === route.cardId);
+        if (!card) return <View style={styles.content} />;
+        const fromDetail = route.fromDetail;
+        return (
+          <CardPayScreen
+            card={card}
+            onPay={(amountCents) => payCard(card.id, amountCents)}
+            onClose={() => navigate(fromDetail ? { name: 'cardDetail', cardId: card.id } : { name: 'cards' })}
+          />
+        );
+      }
       case 'scan':
         return (
           <ScanScreen
@@ -290,7 +347,7 @@ export default function App() {
       default:
         return null;
     }
-  }, [route, expenses, groups, settlements, mileage, budgets, cards, cardPayments, user, navigate, saveExpense]);
+  }, [route, expenses, groups, settlements, mileage, budgets, cards, cardPayments, rewardCoins, user, navigate, saveExpense, payCard]);
 
   const headerTitle =
     route.name === 'group'
@@ -315,7 +372,7 @@ export default function App() {
   return (
     <View style={styles.page}>
       <View style={styles.phone}>
-        {showTitle || showBack ? (
+        {headerVisible ? (
           <View style={styles.header}>
             {showBack ? (
               <Pressable onPress={goBack} style={styles.back}>

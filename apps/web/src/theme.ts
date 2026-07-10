@@ -41,3 +41,30 @@ export const AVATAR_COLORS = [
 
 export const CURRENCY = 'INR';
 export const CURRENCY_SYMBOL = '₹';
+
+/** Premium dark palette for the Credit Cards section (card-forward, elegant). */
+export const DARK = {
+  bg: '#0B0E13',
+  surface: '#151A21',
+  surface2: '#1E252F',
+  raised: '#232C38',
+  text: '#F2F5F8',
+  subtext: '#9BA6B2',
+  muted: '#6B7684',
+  border: '#2A323D',
+  gold: '#E7C583',
+  goldSoft: 'rgba(231,197,131,0.14)',
+  green: '#33D9A6',
+  greenSoft: 'rgba(51,217,166,0.14)',
+  red: '#FF6B5A',
+  blue: '#5B8DEF',
+};
+
+/** Deep, premium card-face gradients keyed by network. */
+export const CARD_GRADIENTS: Record<string, [string, string]> = {
+  visa: ['#243B6B', '#0B1220'],
+  mastercard: ['#3E2434', '#160D14'],
+  rupay: ['#123A2B', '#0A1A14'],
+  amex: ['#1D4147', '#0B1B1E'],
+  default: ['#232B36', '#0E1116'],
+};
