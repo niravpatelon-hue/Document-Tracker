@@ -1,0 +1,14 @@
+{
+  "//": "Standalone config for the pure domain layer. It has no React Native dependency, so it must NOT inherit the app's RN tsconfig. This also lets bundlers/consumers (e.g. the web preview) transform these files without resolving RN tooling.",
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["."]
+}
