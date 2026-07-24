@@ -20,6 +20,7 @@ interface Props {
   cards: CreditCard[];
   onOpenCards: () => void;
   onOpenAnalysis: () => void;
+  onOpenChat: () => void;
 }
 
 const TODAY = new Date().toISOString().slice(0, 10);
@@ -37,7 +38,7 @@ const ANALYSIS_KINDS: ReadonlySet<SuggestionKind> = new Set<SuggestionKind>([
   'spend_spike',
 ]);
 
-export default function OptimizeScreen({ expenses, budgets, cards, onOpenCards, onOpenAnalysis }: Props) {
+export default function OptimizeScreen({ expenses, budgets, cards, onOpenCards, onOpenAnalysis, onOpenChat }: Props) {
   const nowKey = useMemo(() => monthKeyOf(TODAY), []);
   const prevKey = useMemo(() => previousMonth(nowKey), [nowKey]);
 
@@ -93,6 +94,17 @@ export default function OptimizeScreen({ expenses, budgets, cards, onOpenCards, 
         <Text style={styles.heroCount}>
           {suggestions.length} tip{suggestions.length === 1 ? '' : 's'} found
         </Text>
+      </Card>
+
+      <Card style={styles.chatCard} onPress={onOpenChat}>
+        <View style={styles.chatRow}>
+          <IconChip name="sparkles" color={COLORS.primaryDark} bg={COLORS.primarySoft} size={40} />
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={styles.title}>Ask AI about your spending</Text>
+            <Text style={styles.detail}>Get instant answers about any expense, budget, or card</Text>
+          </View>
+          <Icon name="chevron" color={COLORS.muted} size={20} />
+        </View>
       </Card>
 
       <View style={{ marginTop: 20 }}>
@@ -157,6 +169,9 @@ const styles = StyleSheet.create({
   heroBig: { color: COLORS.ink, fontWeight: '900', fontSize: 30, marginTop: 16 },
   heroLine: { color: COLORS.ink, fontSize: 13.5, fontWeight: '600', marginTop: 4 },
   heroCount: { color: COLORS.primaryDark, fontSize: 12.5, fontWeight: '800', marginTop: 10 },
+
+  chatCard: { marginTop: 14 },
+  chatRow: { flexDirection: 'row', alignItems: 'center' },
 
   row: { flexDirection: 'row', alignItems: 'flex-start' },
   title: { color: COLORS.ink, fontWeight: '800', fontSize: 14.5 },
