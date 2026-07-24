@@ -209,7 +209,11 @@ export default function GroupDetailScreen({
                   rightTop={<BalanceAmount cents={net} />}
                   rightBottom={
                     <View style={styles.rowActions}>
-                      <Pressable onPress={() => onToggleSettled?.(e.id)} hitSlop={8}>
+                      <Pressable
+                        onPress={() => onToggleSettled?.(e.id)}
+                        hitSlop={8}
+                        accessibilityLabel={e.settled ? 'Mark unsettled' : 'Mark settled'}
+                      >
                         {e.settled ? (
                           <View style={styles.settledDotOn}>
                             <Icon name="check" color="#fff" size={10} strokeWidth={2.6} />
@@ -218,7 +222,13 @@ export default function GroupDetailScreen({
                           <View style={styles.settledDotOff} />
                         )}
                       </Pressable>
-                      <Pressable onPress={() => onDeleteExpense(e.id)} hitSlop={8}>
+                      <Pressable
+                        onPress={() => {
+                          if (window.confirm(`Delete "${e.description}"? This can't be undone.`)) onDeleteExpense(e.id);
+                        }}
+                        hitSlop={8}
+                        accessibilityLabel={`Delete ${e.description}`}
+                      >
                         <Icon name="trash" color={COLORS.muted} size={15} />
                       </Pressable>
                     </View>

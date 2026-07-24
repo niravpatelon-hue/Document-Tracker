@@ -21,8 +21,7 @@ interface Props {
   onAddExpense: () => void;
   onEditExpense: (e: Expense) => void;
   onOpenAnalysis: () => void;
-  /** Toggle the cosmetic "settled/paid" flag on a personal expense. Display-only; never affects balance math. */
-  onToggleSettled?: (id: string) => void;
+  onDeleteExpense: (id: string) => void;
 }
 
 function formatDateLabel(dateISO: string): string {
@@ -37,7 +36,7 @@ export default function PersonalScreen({
   onAddExpense,
   onEditExpense,
   onOpenAnalysis,
-  onToggleSettled,
+  onDeleteExpense,
 }: Props) {
   const [query, setQuery] = useState('');
 
@@ -172,14 +171,13 @@ export default function PersonalScreen({
                   rightTop={<Text style={styles.rowAmt}>{formatINR(myShareCents(e))}</Text>}
                   rightBottom={
                     <Pressable
-                      onPress={() => onToggleSettled?.(e.id)}
+                      onPress={() => {
+                        if (window.confirm(`Delete "${e.description}"? This can't be undone.`)) onDeleteExpense(e.id);
+                      }}
                       hitSlop={8}
-                      style={[styles.settledPill, e.settled ? styles.settledPillOn : styles.settledPillOff]}
+                      accessibilityLabel={`Delete ${e.description}`}
                     >
-                      {e.settled ? <Icon name="check" color={COLORS.owed} size={11} strokeWidth={2.6} /> : null}
-                      <Text style={e.settled ? styles.settledPillTextOn : styles.settledPillTextOff}>
-                        {e.settled ? 'Paid' : 'Mark paid'}
-                      </Text>
+                      <Icon name="trash" color={COLORS.muted} size={15} />
                     </Pressable>
                   }
                   onPress={() => onEditExpense(e)}
@@ -253,19 +251,6 @@ const styles = StyleSheet.create({
   section: { marginTop: 22 },
   rowDivider: { height: 1, backgroundColor: COLORS.divider, marginLeft: 52 },
   rowAmt: { color: COLORS.ink, fontWeight: '800', fontSize: 15 },
-
-  settledPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-  },
-  settledPillOn: { backgroundColor: COLORS.owedSoft },
-  settledPillOff: { backgroundColor: COLORS.chip },
-  settledPillTextOn: { color: COLORS.owed, fontWeight: '700', fontSize: 11 },
-  settledPillTextOff: { color: COLORS.subtext, fontWeight: '700', fontSize: 11 },
 
   analysisLink: {
     textAlign: 'center',

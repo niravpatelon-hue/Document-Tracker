@@ -1,14 +1,12 @@
 /**
  * ScanScreen — AI receipt capture.
  *
- * Reached two ways: (1) the app's Scan action opens the device camera
- * directly and hands the captured photo here as `capturedFile`, which starts
- * extraction immediately with no extra tap; (2) a secondary "upload a file"
- * entry point lands here with no capturedFile, showing the classic
- * tap-to-upload zone for an existing photo, PDF, or Word file. Both paths
- * converge on the same extractTextFromFile -> parseReceiptText -> preview
- * pipeline. A "sample receipt" shortcut lets a reviewer see the flow with no
- * file at all.
+ * The Scan action opens this screen and the device camera at the same
+ * time, so the tap-to-upload zone below is already on hand as a fallback —
+ * for cancelling the camera, or picking an existing photo, PDF, or Word
+ * file instead. Whichever file arrives, both paths converge on the same
+ * extractTextFromFile -> parseReceiptText -> preview pipeline. A "sample
+ * receipt" shortcut lets a reviewer see the flow with no file at all.
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -38,9 +36,7 @@ interface Props {
 type Status = 'idle' | 'working' | 'done' | 'error';
 
 export default function ScanScreen({ capturedFile = null, onParsed, onCancel }: Props) {
-  // Seed straight into 'working' when a camera photo is already in hand, so
-  // the upload drop-zone never flashes for even one frame on this path.
-  const [status, setStatus] = useState<Status>(capturedFile ? 'working' : 'idle');
+  const [status, setStatus] = useState<Status>('idle');
   const [progressLabel, setProgressLabel] = useState('');
   const [progressPct, setProgressPct] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
@@ -84,14 +80,14 @@ export default function ScanScreen({ capturedFile = null, onParsed, onCancel }: 
     }
   }
 
-  // A camera photo captured before this screen even mounted — start extracting
-  // right away so the user never sees the upload zone for this path.
+  // The camera runs alongside this already-open screen — once it hands back
+  // a photo, start extracting right away with no extra tap.
   useEffect(() => {
     if (capturedFile) {
       void handleFile(capturedFile);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [capturedFile]);
 
   function trySample() {
     const fields = parseReceiptText(SAMPLE_RECEIPT_TEXT);
@@ -147,9 +143,9 @@ export default function ScanScreen({ capturedFile = null, onParsed, onCancel }: 
         </Text>
       </View>
       <Text style={styles.subtitle}>
-        {capturedFile
-          ? "We'll pull out the vendor, amount, tax, date and category automatically."
-          : "Upload a photo, PDF, or Word file — we'll pull out the vendor, amount, tax, date and category automatically."}
+        {status === 'idle' || status === 'error'
+          ? 'Opening your camera — or tap below to upload a photo, PDF, or Word file instead.'
+          : "We'll pull out the vendor, amount, tax, date and category automatically."}
       </Text>
 
       {status !== 'done' && (

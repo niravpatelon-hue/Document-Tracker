@@ -234,7 +234,7 @@ export default function AddExpenseScreen({
       involvedIds,
       splitType: finalSplitType,
       allocations: finalAllocations,
-      settled,
+      settled: mode === 'split' ? settled : false,
     };
     onSave(draft);
   }
@@ -516,13 +516,15 @@ export default function AddExpenseScreen({
         </View>
       )}
 
-      {/* Settled / already paid toggle */}
-      <Pressable onPress={() => setSettled((s) => !s)} style={styles.settledRow}>
-        <View style={[styles.settledBox, settled ? styles.settledBoxOn : null]}>
-          {settled ? <Icon name="check" color="#fff" size={14} strokeWidth={2.8} /> : null}
-        </View>
-        <Text style={styles.settledLabel}>Mark as already settled / paid</Text>
-      </Pressable>
+      {/* Settled / already paid toggle — group expenses only; personal expenses have no "paid" concept */}
+      {mode === 'split' ? (
+        <Pressable onPress={() => setSettled((s) => !s)} style={styles.settledRow}>
+          <View style={[styles.settledBox, settled ? styles.settledBoxOn : null]}>
+            {settled ? <Icon name="check" color="#fff" size={14} strokeWidth={2.8} /> : null}
+          </View>
+          <Text style={styles.settledLabel}>Mark as already settled / paid</Text>
+        </Pressable>
+      ) : null}
 
       {/* 4. Save / cancel */}
       {formError ? <Text style={styles.formError}>{formError}</Text> : null}

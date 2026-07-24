@@ -66,7 +66,7 @@ type Route =
   | { name: 'cardDetail'; cardId: string }
   | { name: 'cardPay'; cardId: string; fromDetail?: boolean }
   | { name: 'group'; groupId: string }
-  | { name: 'scan'; capturedFile?: File | null }
+  | { name: 'scan' }
   | { name: 'add'; prefill?: ScanPrefill | null; presetGroupId?: string | null; editing?: Expense | null; returnTo?: Route }
   | { name: 'mileage' };
 
@@ -109,6 +109,7 @@ export default function App() {
   const [recurring, setRecurring] = useState<RecurringExpense[]>([]);
   const [user, setUser] = useState<WebUser | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [pendingCapture, setPendingCapture] = useState<File | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -149,26 +150,29 @@ export default function App() {
 
   const navigate = useCallback((next: Route) => setRoute(next), []);
 
-  // The Scan action opens the device camera directly — the click() must fire
-  // synchronously inside the same tap handler the user invoked (browsers
-  // require a live user gesture to open a file/camera picker; a click() from
-  // inside a mounted screen's useEffect after navigating is not reliable).
-  // Cancelling the camera leaves the user exactly where they were, same as a
-  // native camera app. A separate "upload a file" entry point still reaches
-  // the classic ScanScreen upload flow with no capture attribute.
+  // The Scan action opens ScanScreen and the device camera at the same time:
+  // the camera click() must fire synchronously inside the same tap handler
+  // the user invoked (browsers require a live user gesture to open a
+  // file/camera picker), while navigating there immediately means the
+  // screen's own upload drop-zone is already on hand as a fallback —
+  // cancelling the camera, or preferring an existing photo/PDF/Word file.
+  // Clearing any previous capture up front means a fresh scan never
+  // re-processes yesterday's photo before the new one arrives.
   const triggerScan = useCallback(() => {
+    setPendingCapture(null);
+    navigate({ name: 'scan' });
     cameraInputRef.current?.click();
-  }, []);
+  }, [navigate]);
 
   const handleCameraCapture = useCallback((e: any) => {
     const file: File | undefined = e?.target?.files?.[0];
     if (file) {
-      navigate({ name: 'scan', capturedFile: file });
+      setPendingCapture(file);
     }
     if (cameraInputRef.current) {
       cameraInputRef.current.value = '';
     }
-  }, [navigate]);
+  }, []);
 
   const saveExpense = useCallback((draft: Omit<Expense, 'id' | 'createdAt'>, editingId?: string | null) => {
     if (editingId) {
@@ -180,6 +184,10 @@ export default function App() {
 
   const toggleSettled = useCallback((id: string) => {
     setExpenses((prev) => prev.map((e) => (e.id === id ? { ...e, settled: !e.settled } : e)));
+  }, []);
+
+  const deleteExpense = useCallback((id: string) => {
+    setExpenses((prev) => prev.filter((e) => e.id !== id));
   }, []);
 
   const payCard = useCallback(
@@ -260,7 +268,6 @@ export default function App() {
             cards={cards}
             budgets={budgets}
             onScan={triggerScan}
-            onUploadReceipt={() => navigate({ name: 'scan' })}
             onAddExpense={() => navigate({ name: 'add', returnTo: { name: 'home' } })}
             onOpenPersonal={() => navigate({ name: 'personal' })}
             onOpenGroups={() => navigate({ name: 'groups' })}
@@ -281,7 +288,7 @@ export default function App() {
             onAddExpense={() => navigate({ name: 'add', returnTo: { name: 'personal' } })}
             onEditExpense={(e) => navigate({ name: 'add', editing: e, returnTo: { name: 'personal' } })}
             onOpenAnalysis={() => navigate({ name: 'analysis' })}
-            onToggleSettled={toggleSettled}
+            onDeleteExpense={deleteExpense}
           />
         );
       case 'groups':
@@ -311,7 +318,7 @@ export default function App() {
             settlements={settlements.filter((s) => s.groupId === group.id)}
             onAddExpense={() => navigate({ name: 'add', presetGroupId: group.id, returnTo: { name: 'group', groupId: group.id } })}
             onEditExpense={(e) => navigate({ name: 'add', editing: e, returnTo: { name: 'group', groupId: group.id } })}
-            onDeleteExpense={(id) => setExpenses((prev) => prev.filter((e) => e.id !== id))}
+            onDeleteExpense={deleteExpense}
             onRecordSettlement={(s) => setSettlements((prev) => [{ ...s, id: newId(), createdAt: Date.now() }, ...prev])}
             onToggleSettled={toggleSettled}
           />
@@ -400,7 +407,7 @@ export default function App() {
       case 'scan':
         return (
           <ScanScreen
-            capturedFile={route.capturedFile ?? null}
+            capturedFile={pendingCapture}
             onParsed={(prefill) => navigate({ name: 'add', prefill, returnTo: { name: 'home' } })}
             onCancel={() => navigate({ name: 'home' })}
           />
@@ -448,7 +455,7 @@ export default function App() {
       default:
         return null;
     }
-  }, [route, expenses, groups, settlements, mileage, budgets, cards, cardPayments, rewardCoins, recurring, people, user, navigate, saveExpense, payCard, toggleSettled, settlePeople, createRecurring, deleteRecurring, toggleRecurringActive, triggerScan]);
+  }, [route, expenses, groups, settlements, mileage, budgets, cards, cardPayments, rewardCoins, recurring, people, user, navigate, saveExpense, deleteExpense, payCard, toggleSettled, settlePeople, createRecurring, deleteRecurring, toggleRecurringActive, triggerScan, pendingCapture]);
 
   const headerTitle =
     route.name === 'group'

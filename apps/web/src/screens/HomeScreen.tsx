@@ -48,7 +48,6 @@ interface Props {
   budgets: Budget[];
   recurring: RecurringExpense[];
   onScan: () => void;
-  onUploadReceipt: () => void;
   onAddExpense: () => void;
   onOpenPersonal: () => void;
   onOpenGroups: () => void;
@@ -144,7 +143,6 @@ export default function HomeScreen({
   budgets,
   recurring,
   onScan,
-  onUploadReceipt,
   onAddExpense,
   onOpenPersonal,
   onOpenGroups,
@@ -306,7 +304,6 @@ export default function HomeScreen({
           <Button label="Scan receipt" onPress={onScan} icon="scan" style={{ flex: 1 }} />
           <Button label="Add expense" onPress={onAddExpense} variant="secondary" icon="plus" style={{ flex: 1 }} />
         </View>
-        <Text style={styles.uploadLink} onPress={onUploadReceipt}>or upload a receipt file</Text>
       </Card>
 
       {/* Feature grid */}
@@ -497,7 +494,6 @@ const styles = StyleSheet.create({
   heroMoney: { fontSize: 22, fontWeight: '900' },
   heroLine: { color: COLORS.ink, fontSize: 20, fontWeight: '700' },
   heroBtns: { flexDirection: 'row', gap: 10, marginTop: 16 },
-  uploadLink: { color: COLORS.primaryDark, fontWeight: '700', fontSize: 12.5, textAlign: 'center', marginTop: 10 },
 
   grid: { marginTop: 18, gap: 12 },
   gridRow: { flexDirection: 'row', gap: 12 },
