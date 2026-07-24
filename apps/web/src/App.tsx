@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { rewardCoinsFor } from '@domain/analytics/cards';
 import { COLORS } from './theme';
@@ -60,13 +60,13 @@ type Route =
   | { name: 'account' }
   | { name: 'analysis' }
   | { name: 'optimize' }
-  | { name: 'chat' }
+  | { name: 'chat'; returnTo?: Route }
   | { name: 'recurring' }
   | { name: 'cards' }
   | { name: 'cardDetail'; cardId: string }
   | { name: 'cardPay'; cardId: string; fromDetail?: boolean }
   | { name: 'group'; groupId: string }
-  | { name: 'scan' }
+  | { name: 'scan'; capturedFile?: File | null }
   | { name: 'add'; prefill?: ScanPrefill | null; presetGroupId?: string | null; editing?: Expense | null; returnTo?: Route }
   | { name: 'mileage' };
 
@@ -81,8 +81,9 @@ const TITLES: Record<string, string> = {
   recurring: 'Recurring',
 };
 
-// Only these three are true bottom tabs; everything else is a drill-in with a back arrow.
-const TAB_ROUTES = new Set(['home', 'cards', 'account']);
+// Only these two are true bottom tabs; everything else — including Cards,
+// reachable from its Home tile — is a drill-in with a back arrow.
+const TAB_ROUTES = new Set(['home', 'account']);
 const BACK_ROUTES = new Set([
   'group', 'scan', 'add', 'optimize', 'mileage', 'personal', 'groups', 'analysis', 'people', 'chat', 'recurring',
 ]);
@@ -108,6 +109,7 @@ export default function App() {
   const [recurring, setRecurring] = useState<RecurringExpense[]>([]);
   const [user, setUser] = useState<WebUser | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const s = loadState() ?? seedState();
@@ -146,6 +148,27 @@ export default function App() {
   }, [loaded]);
 
   const navigate = useCallback((next: Route) => setRoute(next), []);
+
+  // The Scan action opens the device camera directly — the click() must fire
+  // synchronously inside the same tap handler the user invoked (browsers
+  // require a live user gesture to open a file/camera picker; a click() from
+  // inside a mounted screen's useEffect after navigating is not reliable).
+  // Cancelling the camera leaves the user exactly where they were, same as a
+  // native camera app. A separate "upload a file" entry point still reaches
+  // the classic ScanScreen upload flow with no capture attribute.
+  const triggerScan = useCallback(() => {
+    cameraInputRef.current?.click();
+  }, []);
+
+  const handleCameraCapture = useCallback((e: any) => {
+    const file: File | undefined = e?.target?.files?.[0];
+    if (file) {
+      navigate({ name: 'scan', capturedFile: file });
+    }
+    if (cameraInputRef.current) {
+      cameraInputRef.current.value = '';
+    }
+  }, [navigate]);
 
   const saveExpense = useCallback((draft: Omit<Expense, 'id' | 'createdAt'>, editingId?: string | null) => {
     if (editingId) {
@@ -202,7 +225,7 @@ export default function App() {
   const headerVisible = !NO_CHROME.has(route.name) && (showTitle || showBack);
 
   const activeTab: TabKey | null =
-    route.name === 'home' ? 'home' : route.name === 'cards' ? 'cards' : route.name === 'account' ? 'account' : null;
+    route.name === 'home' ? 'home' : route.name === 'account' ? 'account' : null;
 
   const goBack = () => {
     switch (route.name) {
@@ -219,7 +242,7 @@ export default function App() {
       case 'people':
         return navigate({ name: 'groups' });
       case 'chat':
-        return navigate({ name: 'optimize' });
+        return navigate(route.returnTo ?? { name: 'optimize' });
       default:
         return navigate({ name: 'home' });
     }
@@ -236,7 +259,8 @@ export default function App() {
             settlements={settlements}
             cards={cards}
             budgets={budgets}
-            onScan={() => navigate({ name: 'scan' })}
+            onScan={triggerScan}
+            onUploadReceipt={() => navigate({ name: 'scan' })}
             onAddExpense={() => navigate({ name: 'add', returnTo: { name: 'home' } })}
             onOpenPersonal={() => navigate({ name: 'personal' })}
             onOpenGroups={() => navigate({ name: 'groups' })}
@@ -246,14 +270,14 @@ export default function App() {
             onOpenGroup={(groupId) => navigate({ name: 'group', groupId })}
             recurring={recurring}
             onOpenRecurring={() => navigate({ name: 'recurring' })}
-            onOpenChat={() => navigate({ name: 'chat' })}
+            onOpenChat={() => navigate({ name: 'chat', returnTo: { name: 'home' } })}
           />
         );
       case 'personal':
         return (
           <PersonalScreen
             expenses={expenses}
-            onScan={() => navigate({ name: 'scan' })}
+            onScan={triggerScan}
             onAddExpense={() => navigate({ name: 'add', returnTo: { name: 'personal' } })}
             onEditExpense={(e) => navigate({ name: 'add', editing: e, returnTo: { name: 'personal' } })}
             onOpenAnalysis={() => navigate({ name: 'analysis' })}
@@ -314,7 +338,7 @@ export default function App() {
             cards={cards}
             onOpenCards={() => navigate({ name: 'cards' })}
             onOpenAnalysis={() => navigate({ name: 'analysis' })}
-            onOpenChat={() => navigate({ name: 'chat' })}
+            onOpenChat={() => navigate({ name: 'chat', returnTo: { name: 'optimize' } })}
           />
         );
       case 'chat':
@@ -376,8 +400,8 @@ export default function App() {
       case 'scan':
         return (
           <ScanScreen
+            capturedFile={route.capturedFile ?? null}
             onParsed={(prefill) => navigate({ name: 'add', prefill, returnTo: { name: 'home' } })}
-            onManual={() => navigate({ name: 'add', returnTo: { name: 'home' } })}
             onCancel={() => navigate({ name: 'home' })}
           />
         );
@@ -424,7 +448,7 @@ export default function App() {
       default:
         return null;
     }
-  }, [route, expenses, groups, settlements, mileage, budgets, cards, cardPayments, rewardCoins, recurring, people, user, navigate, saveExpense, payCard, toggleSettled, settlePeople, createRecurring, deleteRecurring, toggleRecurringActive]);
+  }, [route, expenses, groups, settlements, mileage, budgets, cards, cardPayments, rewardCoins, recurring, people, user, navigate, saveExpense, payCard, toggleSettled, settlePeople, createRecurring, deleteRecurring, toggleRecurringActive, triggerScan]);
 
   const headerTitle =
     route.name === 'group'
@@ -467,11 +491,18 @@ export default function App() {
           <TabBar
             active={activeTab}
             onNavigate={(tab) => navigate({ name: tab } as Route)}
-            onScan={() => navigate({ name: 'scan' })}
-            dark={route.name === 'cards'}
+            onScan={triggerScan}
           />
         ) : null}
       </View>
+      {React.createElement('input', {
+        ref: cameraInputRef,
+        type: 'file',
+        accept: 'image/*',
+        capture: 'environment',
+        onChange: handleCameraCapture,
+        style: { display: 'none' },
+      })}
       <Text style={styles.caption}>Web preview · camera &amp; cloud OCR are stubbed here</Text>
     </View>
   );
