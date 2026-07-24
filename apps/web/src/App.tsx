@@ -18,12 +18,15 @@ import {
   type WebUser,
 } from './store';
 import { seedState } from './seed';
+import { buildPeople, type ApportionedSettlement } from './people';
 import HomeScreen from './screens/HomeScreen';
 import PersonalScreen from './screens/PersonalScreen';
 import GroupsScreen from './screens/GroupsScreen';
 import GroupDetailScreen from './screens/GroupDetailScreen';
+import PeopleScreen from './screens/PeopleScreen';
 import AnalysisScreen from './screens/AnalysisScreen';
 import OptimizeScreen from './screens/OptimizeScreen';
+import ChatScreen from './screens/ChatScreen';
 import CardsScreen from './screens/CardsScreen';
 import CardDetailScreen from './screens/CardDetailScreen';
 import CardPayScreen from './screens/CardPayScreen';
@@ -50,9 +53,11 @@ type Route =
   | { name: 'home' }
   | { name: 'personal' }
   | { name: 'groups' }
+  | { name: 'people' }
   | { name: 'account' }
   | { name: 'analysis' }
   | { name: 'optimize' }
+  | { name: 'chat' }
   | { name: 'cards' }
   | { name: 'cardDetail'; cardId: string }
   | { name: 'cardPay'; cardId: string; fromDetail?: boolean }
@@ -64,13 +69,18 @@ type Route =
 const TITLES: Record<string, string> = {
   personal: 'Personal',
   groups: 'Groups',
+  people: 'People',
   account: 'Account',
   scan: 'Scan receipt',
   mileage: 'Mileage',
+  chat: 'Ask AI',
 };
 
-const TAB_ROUTES = new Set(['home', 'personal', 'groups', 'analysis', 'account']);
-const BACK_ROUTES = new Set(['group', 'scan', 'add', 'optimize', 'mileage']);
+// Only these three are true bottom tabs; everything else is a drill-in with a back arrow.
+const TAB_ROUTES = new Set(['home', 'cards', 'account']);
+const BACK_ROUTES = new Set([
+  'group', 'scan', 'add', 'optimize', 'mileage', 'personal', 'groups', 'analysis', 'people', 'chat',
+]);
 // Screens that render full-bleed with their own top bar — the app chrome is omitted.
 const NO_CHROME = new Set(['home', 'cards', 'cardDetail', 'cardPay']);
 // Screens that render their own title (so the app chrome shows no title text).
@@ -119,8 +129,12 @@ export default function App() {
     if (editingId) {
       setExpenses((prev) => prev.map((e) => (e.id === editingId ? { ...e, ...draft, id: e.id, createdAt: e.createdAt } : e)));
     } else {
-      setExpenses((prev) => [{ ...draft, id: newId(), createdAt: Date.now() }, ...prev]);
+      setExpenses((prev) => [{ ...draft, settled: draft.settled ?? false, id: newId(), createdAt: Date.now() }, ...prev]);
     }
+  }, []);
+
+  const toggleSettled = useCallback((id: string) => {
+    setExpenses((prev) => prev.map((e) => (e.id === id ? { ...e, settled: !e.settled } : e)));
   }, []);
 
   const payCard = useCallback(
@@ -134,23 +148,24 @@ export default function App() {
     [cards],
   );
 
+  const people = useMemo(() => buildPeople(groups, expenses, settlements), [groups, expenses, settlements]);
+
+  const settlePeople = useCallback((apportioned: ApportionedSettlement[]) => {
+    if (apportioned.length === 0) return;
+    const now = Date.now();
+    setSettlements((prev) => [
+      ...apportioned.map((s) => ({ ...s, id: newId(), createdAt: now })),
+      ...prev,
+    ]);
+  }, []);
+
   const showBack = BACK_ROUTES.has(route.name);
   const showTabBar = TAB_ROUTES.has(route.name);
   const showTitle = !NO_APP_TITLE.has(route.name);
   const headerVisible = !NO_CHROME.has(route.name) && (showTitle || showBack);
 
   const activeTab: TabKey | null =
-    route.name === 'home'
-      ? 'home'
-      : route.name === 'personal'
-      ? 'personal'
-      : route.name === 'groups' || route.name === 'group'
-      ? 'groups'
-      : route.name === 'analysis'
-      ? 'analysis'
-      : route.name === 'account'
-      ? 'account'
-      : null;
+    route.name === 'home' ? 'home' : route.name === 'cards' ? 'cards' : route.name === 'account' ? 'account' : null;
 
   const goBack = () => {
     switch (route.name) {
@@ -164,6 +179,10 @@ export default function App() {
         return navigate({ name: 'cards' });
       case 'cardPay':
         return navigate(route.fromDetail ? { name: 'cardDetail', cardId: route.cardId } : { name: 'cards' });
+      case 'people':
+        return navigate({ name: 'groups' });
+      case 'chat':
+        return navigate({ name: 'optimize' });
       default:
         return navigate({ name: 'home' });
     }
@@ -198,6 +217,7 @@ export default function App() {
             onAddExpense={() => navigate({ name: 'add', returnTo: { name: 'personal' } })}
             onEditExpense={(e) => navigate({ name: 'add', editing: e, returnTo: { name: 'personal' } })}
             onOpenAnalysis={() => navigate({ name: 'analysis' })}
+            onToggleSettled={toggleSettled}
           />
         );
       case 'groups':
@@ -207,6 +227,7 @@ export default function App() {
             groups={groups}
             settlements={settlements}
             onOpenGroup={(groupId) => navigate({ name: 'group', groupId })}
+            onOpenPeople={() => navigate({ name: 'people' })}
             onCreateGroup={(g) => {
               const id = newId();
               setGroups((prev) => [...prev, { ...g, id, createdAt: Date.now() }]);
@@ -214,6 +235,8 @@ export default function App() {
             }}
           />
         );
+      case 'people':
+        return <PeopleScreen people={people} onSettle={settlePeople} />;
       case 'group': {
         const group = groups.find((g) => g.id === route.groupId);
         if (!group) return <View style={styles.content} />;
@@ -226,6 +249,7 @@ export default function App() {
             onEditExpense={(e) => navigate({ name: 'add', editing: e, returnTo: { name: 'group', groupId: group.id } })}
             onDeleteExpense={(id) => setExpenses((prev) => prev.filter((e) => e.id !== id))}
             onRecordSettlement={(s) => setSettlements((prev) => [{ ...s, id: newId(), createdAt: Date.now() }, ...prev])}
+            onToggleSettled={toggleSettled}
           />
         );
       }
@@ -250,8 +274,11 @@ export default function App() {
             cards={cards}
             onOpenCards={() => navigate({ name: 'cards' })}
             onOpenAnalysis={() => navigate({ name: 'analysis' })}
+            onOpenChat={() => navigate({ name: 'chat' })}
           />
         );
+      case 'chat':
+        return <ChatScreen expenses={expenses} budgets={budgets} cards={cards} />;
       case 'cards':
         return (
           <CardsScreen
@@ -347,7 +374,7 @@ export default function App() {
       default:
         return null;
     }
-  }, [route, expenses, groups, settlements, mileage, budgets, cards, cardPayments, rewardCoins, user, navigate, saveExpense, payCard]);
+  }, [route, expenses, groups, settlements, mileage, budgets, cards, cardPayments, rewardCoins, people, user, navigate, saveExpense, payCard, toggleSettled, settlePeople]);
 
   const headerTitle =
     route.name === 'group'
@@ -391,6 +418,7 @@ export default function App() {
             active={activeTab}
             onNavigate={(tab) => navigate({ name: tab } as Route)}
             onScan={() => navigate({ name: 'scan' })}
+            dark={route.name === 'cards'}
           />
         ) : null}
       </View>

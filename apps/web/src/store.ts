@@ -69,6 +69,8 @@ export interface Expense {
   groupId: string | null;
   /** Payment source — the credit card this was paid with (optional). */
   cardId?: string | null;
+  /** User-controlled "I've squared this away" flag. Cosmetic only — never read by balance math. */
+  settled?: boolean;
   /** Who paid, and how much (supports multiple payers). */
   paidBy: Payment[];
   /** Members who share this expense. */
@@ -251,6 +253,7 @@ function migrateExpense(e: any, i: number): Expense {
     taxCents: e?.taxCents != null ? Number(e.taxCents) : null,
     groupId: e?.groupId ?? null,
     cardId: e?.cardId ?? null,
+    settled: Boolean(e?.settled),
     paidBy,
     involvedIds,
     splitType: e?.splitType ?? 'equal',

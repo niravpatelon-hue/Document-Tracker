@@ -9,6 +9,8 @@ import {
   Button,
   Card,
   Field,
+  Icon,
+  IconChip,
   ListRow,
   Pill,
   SectionLabel,
@@ -27,6 +29,7 @@ interface Props {
     type: GroupType;
     members: { id: string; name: string; upi?: string }[];
   }) => void;
+  onOpenPeople: () => void;
 }
 
 const EMOJIS = ['✈️', '🏠', '💑', '🎉', '🍕', '🏔️', '🚗', '💼'];

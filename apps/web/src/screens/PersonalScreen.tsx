@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { formatINR, formatINRShort } from '@domain/money';
 import { monthKeyOf, monthOverMonth, spendByCategory } from '@domain/analytics/spend';
 import { COLORS } from '../theme';
@@ -21,6 +21,8 @@ interface Props {
   onAddExpense: () => void;
   onEditExpense: (e: Expense) => void;
   onOpenAnalysis: () => void;
+  /** Toggle the cosmetic "settled/paid" flag on a personal expense. Display-only; never affects balance math. */
+  onToggleSettled?: (id: string) => void;
 }
 
 function formatDateLabel(dateISO: string): string {
@@ -29,7 +31,14 @@ function formatDateLabel(dateISO: string): string {
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-export default function PersonalScreen({ expenses, onScan, onAddExpense, onEditExpense, onOpenAnalysis }: Props) {
+export default function PersonalScreen({
+  expenses,
+  onScan,
+  onAddExpense,
+  onEditExpense,
+  onOpenAnalysis,
+  onToggleSettled,
+}: Props) {
   const [query, setQuery] = useState('');
 
   const personal = useMemo(() => expenses.filter((e) => e.groupId == null), [expenses]);
@@ -161,6 +170,18 @@ export default function PersonalScreen({ expenses, onScan, onAddExpense, onEditE
                   title={e.description}
                   subtitle={`${formatDateLabel(e.dateISO)} · ${e.source === 'scan' ? 'Scanned' : 'Manual'}`}
                   rightTop={<Text style={styles.rowAmt}>{formatINR(myShareCents(e))}</Text>}
+                  rightBottom={
+                    <Pressable
+                      onPress={() => onToggleSettled?.(e.id)}
+                      hitSlop={8}
+                      style={[styles.settledPill, e.settled ? styles.settledPillOn : styles.settledPillOff]}
+                    >
+                      {e.settled ? <Icon name="check" color={COLORS.owed} size={11} strokeWidth={2.6} /> : null}
+                      <Text style={e.settled ? styles.settledPillTextOn : styles.settledPillTextOff}>
+                        {e.settled ? 'Paid' : 'Mark paid'}
+                      </Text>
+                    </Pressable>
+                  }
                   onPress={() => onEditExpense(e)}
                 />
               </View>
@@ -232,6 +253,19 @@ const styles = StyleSheet.create({
   section: { marginTop: 22 },
   rowDivider: { height: 1, backgroundColor: COLORS.divider, marginLeft: 52 },
   rowAmt: { color: COLORS.ink, fontWeight: '800', fontSize: 15 },
+
+  settledPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  settledPillOn: { backgroundColor: COLORS.owedSoft },
+  settledPillOff: { backgroundColor: COLORS.chip },
+  settledPillTextOn: { color: COLORS.owed, fontWeight: '700', fontSize: 11 },
+  settledPillTextOff: { color: COLORS.subtext, fontWeight: '700', fontSize: 11 },
 
   analysisLink: {
     textAlign: 'center',

@@ -112,6 +112,9 @@ export default function AddExpenseScreen({
     seedValues(editing),
   );
 
+  /** Cosmetic "already settled/paid" flag — display + toggle only, never read by split/balance math. */
+  const [settled, setSettled] = useState<boolean>(editing?.settled ?? false);
+
   /* Carry-forward media / meta. */
   const imageDataUrl = editing?.imageDataUrl ?? prefill?.imageDataUrl ?? null;
   const rawText = editing?.rawText ?? prefill?.rawText ?? null;
@@ -231,6 +234,7 @@ export default function AddExpenseScreen({
       involvedIds,
       splitType: finalSplitType,
       allocations: finalAllocations,
+      settled,
     };
     onSave(draft);
   }
@@ -512,6 +516,14 @@ export default function AddExpenseScreen({
         </View>
       )}
 
+      {/* Settled / already paid toggle */}
+      <Pressable onPress={() => setSettled((s) => !s)} style={styles.settledRow}>
+        <View style={[styles.settledBox, settled ? styles.settledBoxOn : null]}>
+          {settled ? <Icon name="check" color="#fff" size={14} strokeWidth={2.8} /> : null}
+        </View>
+        <Text style={styles.settledLabel}>Mark as already settled / paid</Text>
+      </Pressable>
+
       {/* 4. Save / cancel */}
       {formError ? <Text style={styles.formError}>{formError}</Text> : null}
       <View style={{ marginTop: 20 }}>
@@ -683,6 +695,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   netLabel: { color: COLORS.subtext, fontSize: 13, fontWeight: '600' },
+
+  settledRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 20,
+  },
+  settledBox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  settledBoxOn: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  settledLabel: { color: COLORS.ink, fontWeight: '600', fontSize: 14 },
 
   formError: {
     color: COLORS.danger,

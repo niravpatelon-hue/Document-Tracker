@@ -26,6 +26,8 @@ interface Props {
   onEditExpense: (e: Expense) => void;
   onDeleteExpense: (id: string) => void;
   onRecordSettlement: (s: { groupId: string; fromUser: string; toUser: string; amountCents: number; note?: string }) => void;
+  /** Toggle the cosmetic "settled/paid" flag on an expense. Display-only; never affects balance math. */
+  onToggleSettled?: (id: string) => void;
 }
 
 export default function GroupDetailScreen({
@@ -36,6 +38,7 @@ export default function GroupDetailScreen({
   onEditExpense,
   onDeleteExpense,
   onRecordSettlement,
+  onToggleSettled,
 }: Props) {
   const nameOf = (id: string) => group.members.find((m) => m.id === id)?.name ?? id;
   const memberOf = (id: string) => group.members.find((m) => m.id === id);
@@ -186,6 +189,9 @@ export default function GroupDetailScreen({
       )}
 
       <SectionLabel>Expenses</SectionLabel>
+      <Text style={styles.settledHint}>
+        Marking an expense as settled is just for your own tracking — it does not change balances.
+      </Text>
       <Card>
         {sorted.length === 0 ? (
           <Text style={styles.empty}>No expenses yet in this group.</Text>
@@ -202,9 +208,20 @@ export default function GroupDetailScreen({
                   subtitle={`${payerName}${extraPayers} paid ${formatINR(e.amountCents)}`}
                   rightTop={<BalanceAmount cents={net} />}
                   rightBottom={
-                    <Pressable onPress={() => onDeleteExpense(e.id)} hitSlop={8}>
-                      <Icon name="trash" color={COLORS.muted} size={15} />
-                    </Pressable>
+                    <View style={styles.rowActions}>
+                      <Pressable onPress={() => onToggleSettled?.(e.id)} hitSlop={8}>
+                        {e.settled ? (
+                          <View style={styles.settledDotOn}>
+                            <Icon name="check" color="#fff" size={10} strokeWidth={2.6} />
+                          </View>
+                        ) : (
+                          <View style={styles.settledDotOff} />
+                        )}
+                      </Pressable>
+                      <Pressable onPress={() => onDeleteExpense(e.id)} hitSlop={8}>
+                        <Icon name="trash" color={COLORS.muted} size={15} />
+                      </Pressable>
+                    </View>
                   }
                   onPress={() => onEditExpense(e)}
                 />
@@ -236,4 +253,21 @@ const styles = StyleSheet.create({
   transferBtns: { flexDirection: 'row', gap: 8, marginTop: 10, flexWrap: 'wrap' },
   smallLabel: { color: COLORS.subtext, fontWeight: '700', fontSize: 12.5, marginBottom: 6 },
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  settledHint: { color: COLORS.subtext, fontSize: 12, marginTop: -4, marginBottom: 10, lineHeight: 16 },
+  rowActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  settledDotOn: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: COLORS.owed,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  settledDotOff: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: COLORS.muted,
+  },
 });
