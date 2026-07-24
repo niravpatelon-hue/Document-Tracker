@@ -62,7 +62,14 @@ function netForGroup(group: Group, expenses: Expense[], settlements: Settlement[
   return balances.find((b) => b.userId === ME)?.net ?? 0;
 }
 
-export default function GroupsScreen({ expenses, groups, settlements, onOpenGroup, onCreateGroup }: Props) {
+export default function GroupsScreen({
+  expenses,
+  groups,
+  settlements,
+  onOpenGroup,
+  onCreateGroup,
+  onOpenPeople,
+}: Props) {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [emoji, setEmoji] = useState(EMOJIS[0]);
@@ -115,6 +122,12 @@ export default function GroupsScreen({ expenses, groups, settlements, onOpenGrou
         <Text style={styles.heroSub}>
           {overallNet === 0 ? "You're all settled up" : overallNet > 0 ? 'you are owed' : 'you owe'}
         </Text>
+      </Card>
+
+      <Card style={styles.peopleCard} onPress={onOpenPeople}>
+        <IconChip name="users" size={36} />
+        <Text style={styles.peopleText}>See who owes what across your groups</Text>
+        <Icon name="chevron" color={COLORS.muted} size={18} />
       </Card>
 
       <View style={styles.headerRow}>
@@ -221,6 +234,8 @@ const styles = StyleSheet.create({
   },
   heroLabel: { color: COLORS.subtext, fontWeight: '700', fontSize: 12.5, marginBottom: 6 },
   heroSub: { color: COLORS.subtext, fontSize: 13, marginTop: 4 },
+  peopleCard: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
+  peopleText: { flex: 1, color: COLORS.ink, fontWeight: '700', fontSize: 13.5 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
   newBtn: { height: 36, paddingHorizontal: 16 },
   label: { color: COLORS.subtext, fontWeight: '700', fontSize: 12.5, marginTop: 10, marginBottom: 6 },
