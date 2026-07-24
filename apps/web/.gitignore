@@ -2,3 +2,18 @@ node_modules/
 dist/
 *.tsbuildinfo
 .vercel
+.env
+.env.local
+
+# Capacitor native Android project is committed (manual edits: signing,
+# plugin config) — only its own build output/local files, and the web build
+# `cap sync` copies in on every run, are excluded.
+android/build/
+android/app/build/
+android/.gradle/
+android/local.properties
+android/*.keystore
+android/*.jks
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+android/capacitor-cordova-android-plugins/

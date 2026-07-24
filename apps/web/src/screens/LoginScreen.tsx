@@ -1,26 +1,26 @@
-import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import React from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { COLORS } from '../theme';
-import { Icon, Card, Button } from '../components/ui';
-import type { WebUser } from '../store';
+import { Icon, Card } from '../components/ui';
 
 interface Props {
-  onSignIn: (user: WebUser) => void;
+  onSignIn: () => void;
+  signingIn: boolean;
+  error: string | null;
 }
 
-export default function LoginScreen({ onSignIn }: Props) {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
+function GoogleG({ size = 20 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 48 48" width={size} height={size}>
+      <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.8 32.9 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.5z" />
+      <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.9 18.9 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 16.3 4 9.6 8.3 6.3 14.7z" />
+      <path fill="#4CAF50" d="M24 44c5.4 0 10.3-2.1 14-5.5l-6.5-5.5c-2 1.5-4.6 2.4-7.5 2.4-5.3 0-9.7-3.1-11.3-7.6l-6.6 5.1C9.5 39.6 16.2 44 24 44z" />
+      <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.9 2.8-2.8 5.1-5.3 6.5l6.5 5.5C39.9 37.7 44 31.5 44 24c0-1.3-.1-2.7-.4-3.5z" />
+    </svg>
+  );
+}
 
-  function signIn() {
-    setError(null);
-    if (!name.trim()) return setError('Enter your name.');
-    if (!/^\S+@\S+\.\S+$/.test(email.trim())) return setError('Enter a valid email address.');
-    onSignIn({ name: name.trim(), email: email.trim() });
-  }
-
+export default function LoginScreen({ onSignIn, signingIn, error }: Props) {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scroll}>
       <View style={styles.brand}>
@@ -32,45 +32,28 @@ export default function LoginScreen({ onSignIn }: Props) {
       </View>
 
       <Card style={styles.card}>
-        <Text style={styles.label}>Full name</Text>
-        <TextInput
-          style={styles.input}
-          value={name}
-          onChangeText={setName}
-          placeholder="Your name"
-          placeholderTextColor={COLORS.muted}
-          autoCapitalize="words"
-        />
-        <Text style={styles.label}>Email</Text>
-        <TextInput
-          style={styles.input}
-          value={email}
-          onChangeText={setEmail}
-          placeholder="you@example.com"
-          placeholderTextColor={COLORS.muted}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
-        <Text style={styles.label}>Password</Text>
-        <TextInput
-          style={styles.input}
-          value={password}
-          onChangeText={setPassword}
-          placeholder="••••••••"
-          placeholderTextColor={COLORS.muted}
-          secureTextEntry
-        />
+        <Text style={styles.blurb}>
+          Your personal expenses stay private to your Google account. Group expenses are shared only
+          with the members you invite — your own Google Drive is where it all lives.
+        </Text>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <View style={styles.buttonWrap}>
-          <Button label="Get started" onPress={signIn} variant="primary" icon="arrowUp" />
-        </View>
+        <Pressable style={styles.googleBtn} onPress={onSignIn} disabled={signingIn}>
+          {signingIn ? (
+            <ActivityIndicator color={COLORS.ink} />
+          ) : (
+            <>
+              <GoogleG size={20} />
+              <Text style={styles.googleBtnText}>Sign in with Google</Text>
+            </>
+          )}
+        </Pressable>
       </Card>
 
       <Text style={styles.note}>
-        Demo sign-in — no real account is created. Your name and email are stored only in this
-        browser to personalize the app.
+        Signing in grants this app access to a private, app-only space in your Drive (for your
+        personal data) and lets it create/share folders for groups you create or join.
       </Text>
     </ScrollView>
   );
@@ -92,18 +75,19 @@ const styles = StyleSheet.create({
   title: { fontSize: 26, fontWeight: '800', color: COLORS.ink, marginTop: 14, letterSpacing: -0.4 },
   tagline: { fontSize: 14, color: COLORS.subtext, marginTop: 6, textAlign: 'center', maxWidth: 260 },
   card: { padding: 18, borderRadius: 20 },
-  label: { fontSize: 13, fontWeight: '600', color: COLORS.subtext, marginTop: 12, marginBottom: 6 },
-  input: {
+  blurb: { fontSize: 13.5, color: COLORS.subtext, lineHeight: 19, marginBottom: 18 },
+  error: { color: COLORS.danger, fontWeight: '600', marginBottom: 12, fontSize: 13 },
+  googleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: COLORS.ink,
-    backgroundColor: COLORS.chip,
+    paddingVertical: 13,
+    backgroundColor: '#fff',
   },
-  error: { color: COLORS.danger, fontWeight: '600', marginTop: 12 },
-  buttonWrap: { marginTop: 18 },
+  googleBtnText: { color: COLORS.ink, fontWeight: '700', fontSize: 15 },
   note: { fontSize: 12, color: COLORS.subtext, textAlign: 'center', marginTop: 18, lineHeight: 17 },
 });

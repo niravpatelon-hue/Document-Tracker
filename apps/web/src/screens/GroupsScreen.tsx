@@ -16,19 +16,14 @@ import {
   SectionLabel,
   EmptyState,
 } from '../components/ui';
-import { ME, newId, type Expense, type Group, type GroupType, type Settlement } from '../store';
+import { ME, type Expense, type Group, type GroupType, type Member, type Settlement } from '../store';
 
 interface Props {
   expenses: Expense[];
   groups: Group[];
   settlements: Settlement[];
   onOpenGroup: (groupId: string) => void;
-  onCreateGroup: (g: {
-    name: string;
-    emoji?: string;
-    type: GroupType;
-    members: { id: string; name: string; upi?: string }[];
-  }) => void;
+  onCreateGroup: (g: { name: string; emoji?: string; type: GroupType; members: Member[] }) => void;
   onOpenPeople: () => void;
 }
 
@@ -74,16 +69,21 @@ export default function GroupsScreen({
   const [name, setName] = useState('');
   const [emoji, setEmoji] = useState(EMOJIS[0]);
   const [type, setType] = useState<GroupType>('trip');
+  const [friendEmail, setFriendEmail] = useState('');
   const [friendName, setFriendName] = useState('');
   const [friendUpi, setFriendUpi] = useState('');
-  const [friends, setFriends] = useState<{ id: string; name: string; upi?: string }[]>([]);
+  const [friends, setFriends] = useState<Member[]>([]);
+  const [friendError, setFriendError] = useState<string | null>(null);
 
   const overallNet = groups.reduce((sum, g) => sum + netForGroup(g, expenses, settlements), 0);
 
   function addFriend() {
-    const n = friendName.trim();
-    if (!n) return;
-    setFriends((prev) => [...prev, { id: newId(), name: n, upi: friendUpi.trim() || undefined }]);
+    const email = friendEmail.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(email)) return setFriendError('Enter a valid Google email address.');
+    if (friends.some((f) => f.id === email)) return setFriendError('Already added.');
+    setFriendError(null);
+    setFriends((prev) => [...prev, { id: email, name: friendName.trim() || email.split('@')[0]!, upi: friendUpi.trim() || undefined }]);
+    setFriendEmail('');
     setFriendName('');
     setFriendUpi('');
   }
@@ -97,9 +97,11 @@ export default function GroupsScreen({
     setName('');
     setEmoji(EMOJIS[0]);
     setType('trip');
+    setFriendEmail('');
     setFriendName('');
     setFriendUpi('');
     setFriends([]);
+    setFriendError(null);
   }
 
   function submit() {
@@ -161,18 +163,30 @@ export default function GroupsScreen({
                 key={f.id}
                 avatar={<Avatar name={f.name} size={34} />}
                 title={f.name}
-                subtitle={f.upi || undefined}
+                subtitle={f.id}
                 rightTop="Remove"
                 onPress={() => removeFriend(f.id)}
               />
             ))}
           </View>
+          <Text style={styles.inviteHint}>
+            Invite by Google email — they'll see this group once they sign in with that account.
+          </Text>
 
+          <View style={styles.addRow}>
+            <Field
+              value={friendEmail}
+              onChangeText={setFriendEmail}
+              placeholder="friend@gmail.com"
+              style={{ flex: 1 }}
+              keyboardType="email-address"
+            />
+          </View>
           <View style={styles.addRow}>
             <Field
               value={friendName}
               onChangeText={setFriendName}
-              placeholder="Friend's name"
+              placeholder="Display name (optional)"
               style={{ flex: 1 }}
             />
           </View>
@@ -185,6 +199,7 @@ export default function GroupsScreen({
             />
             <Button label="Add" onPress={addFriend} variant="secondary" />
           </View>
+          {friendError ? <Text style={styles.friendError}>{friendError}</Text> : null}
 
           <View style={styles.formActions}>
             <Button label="Create group" onPress={submit} disabled={!name.trim()} style={{ flex: 1 }} />
@@ -241,7 +256,9 @@ const styles = StyleSheet.create({
   label: { color: COLORS.subtext, fontWeight: '700', fontSize: 12.5, marginTop: 10, marginBottom: 6 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   memberList: { marginBottom: 4 },
+  inviteHint: { color: COLORS.subtext, fontSize: 12, marginTop: 8, lineHeight: 16 },
   addRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-end', marginTop: 8 },
+  friendError: { color: COLORS.danger, fontSize: 12, fontWeight: '600', marginTop: 6 },
   formActions: { flexDirection: 'row', gap: 10, marginTop: 16 },
   groupEmoji: {
     width: 44,

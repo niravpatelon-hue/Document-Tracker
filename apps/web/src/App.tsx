@@ -3,24 +3,44 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { rewardCoinsFor } from '@domain/analytics/cards';
 import { COLORS } from './theme';
 import {
-  loadState,
+  loadLocalCache,
   loadUser,
   newId,
-  saveState,
+  saveLocalCache,
   saveUser,
+  setCurrentUser,
   type Budget,
   type CardPayment,
   type CreditCard,
   type Expense,
   type Group,
+  type Member,
   type MileageTrip,
+  type PersistedState,
   type RecurringExpense,
   type Settlement,
   type WebUser,
 } from './store';
-import { seedState } from './seed';
 import { buildPeople, type ApportionedSettlement } from './people';
 import { materializeDueRecurring } from './recurring';
+import { signIn as googleSignIn, trySilentSignIn, signOutGoogle, type GoogleProfile } from './auth/google';
+import { DriveSession } from './drive/session';
+import {
+  createGroupFolder,
+  deleteGroupExpense,
+  deleteGroupRecurring,
+  discoverGroups,
+  getOrCreatePersonalFileId,
+  inviteMember,
+  loadPersonalFile,
+  materializeGroupRecurring,
+  savePersonalFile,
+  writeGroupExpense,
+  writeGroupRecurring,
+  writeGroupSettlement,
+  type GroupBundle,
+  type PersonalFile,
+} from './drive/driveStore';
 import HomeScreen from './screens/HomeScreen';
 import PersonalScreen from './screens/PersonalScreen';
 import GroupsScreen from './screens/GroupsScreen';
@@ -96,6 +116,35 @@ function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** Assembles the flat, personal+group-merged shape every screen already expects, from a personal file + discovered group bundles. */
+function mergeState(personal: PersonalFile, groupBundles: GroupBundle[]): PersistedState {
+  return {
+    expenses: [...personal.expenses, ...groupBundles.flatMap((g) => g.expenses)],
+    groups: groupBundles.map((g) => ({ ...g.meta })),
+    settlements: groupBundles.flatMap((g) => g.settlements),
+    mileage: personal.mileage,
+    budgets: personal.budgets,
+    cards: personal.cards,
+    cardPayments: personal.cardPayments,
+    rewardCoins: personal.rewardCoins,
+    recurring: [...personal.recurring, ...groupBundles.flatMap((g) => g.recurring)],
+  };
+}
+
+function personalSliceOf(state: PersistedState): PersonalFile {
+  return {
+    expenses: state.expenses.filter((e) => e.groupId === null),
+    budgets: state.budgets,
+    cards: state.cards,
+    cardPayments: state.cardPayments,
+    mileage: state.mileage,
+    recurring: state.recurring.filter((r) => r.groupId === null),
+    rewardCoins: state.rewardCoins,
+  };
+}
+
+type AuthStatus = 'checking' | 'signedOut' | 'signingIn' | 'loadingData' | 'ready' | 'error';
+
 export default function App() {
   const [route, setRoute] = useState<Route>({ name: 'home' });
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -108,45 +157,137 @@ export default function App() {
   const [rewardCoins, setRewardCoins] = useState(0);
   const [recurring, setRecurring] = useState<RecurringExpense[]>([]);
   const [user, setUser] = useState<WebUser | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const [authStatus, setAuthStatus] = useState<AuthStatus>('checking');
+  const [authError, setAuthError] = useState<string | null>(null);
   const [pendingCapture, setPendingCapture] = useState<File | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
 
-  useEffect(() => {
-    const s = loadState() ?? seedState();
-    setExpenses(s.expenses ?? []);
-    setGroups(s.groups ?? []);
-    setSettlements(s.settlements ?? []);
-    setMileage(s.mileage ?? []);
-    setBudgets(s.budgets ?? []);
-    setCards(s.cards ?? []);
-    setCardPayments(s.cardPayments ?? []);
-    setRewardCoins(s.rewardCoins ?? 0);
-    setRecurring(s.recurring ?? []);
-    setUser(loadUser());
-    setLoaded(true);
+  const sessionRef = useRef<DriveSession | null>(null);
+  const personalFileIdRef = useRef<string | null>(null);
+  const groupFolderIdsRef = useRef<Record<string, string>>({});
+
+  const applyLoadedState = useCallback((s: PersistedState) => {
+    setExpenses(s.expenses);
+    setGroups(s.groups);
+    setSettlements(s.settlements);
+    setMileage(s.mileage);
+    setBudgets(s.budgets);
+    setCards(s.cards);
+    setCardPayments(s.cardPayments);
+    setRewardCoins(s.rewardCoins);
+    setRecurring(s.recurring);
   }, []);
 
-  useEffect(() => {
-    if (loaded) {
-      saveState({ expenses, groups, settlements, mileage, budgets, cards, cardPayments, rewardCoins, recurring });
-    }
-  }, [expenses, groups, settlements, mileage, budgets, cards, cardPayments, rewardCoins, recurring, loaded]);
+  /** Runs after any successful sign-in (silent or interactive): wires up Drive, hydrates from it, and catches up recurring bills. */
+  const completeSignIn = useCallback(async (profile: GoogleProfile) => {
+    setCurrentUser(profile.email);
+    const nextUser: WebUser = { name: profile.name, email: profile.email, picture: profile.picture };
+    setUser(nextUser);
+    saveUser(nextUser);
 
-  // Catch up any recurring rules whose next occurrence has already arrived —
-  // runs once right after hydration (not on every `recurring` change, which
-  // this same effect writes to).
+    const cached = loadLocalCache(profile.email);
+    if (cached) applyLoadedState(cached); // instant paint; Drive's fetch below always overwrites it
+
+    setAuthStatus('loadingData');
+    try {
+      const session = new DriveSession({ accessToken: profile.accessToken, expiresAt: profile.expiresAt });
+      sessionRef.current = session;
+
+      const personalFileId = await getOrCreatePersonalFileId(session);
+      personalFileIdRef.current = personalFileId;
+      const [personal, groupBundles] = await Promise.all([loadPersonalFile(session, personalFileId), discoverGroups(session)]);
+
+      // Catch up recurring bills — personal ones locally (persisted by the debounced sync effect below),
+      // group ones per-folder with a dedupe-on-exists check (materializeGroupRecurring), since two
+      // members could both be catching up the same overdue occurrence at once.
+      const today = todayISO();
+      const { newExpenses: personalNew, updatedRules: personalRules } = materializeDueRecurring(
+        personal.recurring,
+        today,
+      );
+      personal.recurring = personalRules;
+      personal.expenses = [...personalNew, ...personal.expenses];
+
+      await Promise.all(
+        groupBundles.map(async (bundle) => {
+          const { newExpenses, updatedRules } = await materializeGroupRecurring(session, bundle.folderId, bundle.recurring, today);
+          bundle.recurring = updatedRules;
+          bundle.expenses = [...newExpenses, ...bundle.expenses];
+        }),
+      );
+
+      const folderIds: Record<string, string> = {};
+      for (const b of groupBundles) folderIds[b.meta.id] = b.folderId;
+      groupFolderIdsRef.current = folderIds;
+
+      const merged = mergeState(personal, groupBundles);
+      applyLoadedState(merged);
+      saveLocalCache(profile.email, merged);
+      setAuthStatus('ready');
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : 'Could not load your data from Google Drive.');
+      setAuthStatus('error');
+    }
+  }, [applyLoadedState]);
+
   useEffect(() => {
-    if (!loaded) return;
-    setRecurring((currentRules) => {
-      const { newExpenses, updatedRules } = materializeDueRecurring(currentRules, todayISO());
-      if (newExpenses.length > 0) {
-        setExpenses((prev) => [...newExpenses, ...prev]);
+    const cachedProfile = loadUser();
+    if (cachedProfile) setUser(cachedProfile); // optimistic name/picture paint only — no Drive access yet
+    (async () => {
+      const profile = await trySilentSignIn();
+      if (!profile) {
+        setAuthStatus('signedOut');
+        return;
       }
-      return updatedRules;
-    });
+      await completeSignIn(profile);
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded]);
+  }, []);
+
+  const handleSignIn = useCallback(async () => {
+    setAuthStatus('signingIn');
+    setAuthError(null);
+    try {
+      const profile = await googleSignIn();
+      await completeSignIn(profile);
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : 'Sign-in failed.');
+      setAuthStatus('signedOut');
+    }
+  }, [completeSignIn]);
+
+  const handleSignOut = useCallback(() => {
+    signOutGoogle(sessionRef.current?.getAccessToken() ?? null);
+    sessionRef.current = null;
+    personalFileIdRef.current = null;
+    groupFolderIdsRef.current = {};
+    saveUser(null);
+    setUser(null);
+    setCurrentUser('');
+    applyLoadedState({ expenses: [], groups: [], settlements: [], mileage: [], budgets: [], cards: [], cardPayments: [], rewardCoins: 0, recurring: [] });
+    setAuthStatus('signedOut');
+    setRoute({ name: 'home' });
+  }, [applyLoadedState]);
+
+  // Debounced sync of the personal slice to Drive — mirrors the old "one effect saves everything"
+  // pattern, just scoped to personal-only fields (group writes happen explicitly per mutation, since
+  // each group record is its own Drive file, not a blob).
+  const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (authStatus !== 'ready' || !user) return;
+    const snapshot = personalSliceOf({ expenses, groups, settlements, mileage, budgets, cards, cardPayments, rewardCoins, recurring });
+    saveLocalCache(user.email, { expenses, groups, settlements, mileage, budgets, cards, cardPayments, rewardCoins, recurring });
+    if (syncTimer.current) clearTimeout(syncTimer.current);
+    syncTimer.current = setTimeout(() => {
+      const session = sessionRef.current;
+      const fileId = personalFileIdRef.current;
+      if (session && fileId) void savePersonalFile(session, fileId, snapshot);
+    }, 800);
+    return () => {
+      if (syncTimer.current) clearTimeout(syncTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expenses, groups, settlements, mileage, budgets, cards, cardPayments, rewardCoins, recurring, authStatus]);
 
   const navigate = useCallback((next: Route) => setRoute(next), []);
 
@@ -175,20 +316,43 @@ export default function App() {
   }, []);
 
   const saveExpense = useCallback((draft: Omit<Expense, 'id' | 'createdAt'>, editingId?: string | null) => {
+    const final: Expense = editingId
+      ? { ...draft, id: editingId, createdAt: expenses.find((e) => e.id === editingId)?.createdAt ?? Date.now() }
+      : { ...draft, settled: draft.settled ?? false, id: newId(), createdAt: Date.now() };
     if (editingId) {
-      setExpenses((prev) => prev.map((e) => (e.id === editingId ? { ...e, ...draft, id: e.id, createdAt: e.createdAt } : e)));
+      setExpenses((prev) => prev.map((e) => (e.id === editingId ? final : e)));
     } else {
-      setExpenses((prev) => [{ ...draft, settled: draft.settled ?? false, id: newId(), createdAt: Date.now() }, ...prev]);
+      setExpenses((prev) => [final, ...prev]);
     }
-  }, []);
+    if (final.groupId !== null) {
+      const folderId = groupFolderIdsRef.current[final.groupId];
+      const session = sessionRef.current;
+      if (session && folderId) void writeGroupExpense(session, folderId, final);
+    }
+  }, [expenses]);
 
   const toggleSettled = useCallback((id: string) => {
-    setExpenses((prev) => prev.map((e) => (e.id === id ? { ...e, settled: !e.settled } : e)));
+    setExpenses((prev) => {
+      const next = prev.map((e) => (e.id === id ? { ...e, settled: !e.settled } : e));
+      const updated = next.find((e) => e.id === id);
+      if (updated && updated.groupId !== null) {
+        const folderId = groupFolderIdsRef.current[updated.groupId];
+        const session = sessionRef.current;
+        if (session && folderId) void writeGroupExpense(session, folderId, updated);
+      }
+      return next;
+    });
   }, []);
 
   const deleteExpense = useCallback((id: string) => {
+    const target = expenses.find((e) => e.id === id);
     setExpenses((prev) => prev.filter((e) => e.id !== id));
-  }, []);
+    if (target && target.groupId !== null) {
+      const folderId = groupFolderIdsRef.current[target.groupId];
+      const session = sessionRef.current;
+      if (session && folderId) void deleteGroupExpense(session, folderId, id);
+    }
+  }, [expenses]);
 
   const payCard = useCallback(
     (cardId: string, amountCents: number) => {
@@ -206,25 +370,88 @@ export default function App() {
     const { newExpenses, updatedRules } = materializeDueRecurring([rule], todayISO());
     setRecurring((prev) => [...updatedRules, ...prev]);
     if (newExpenses.length > 0) setExpenses((prev) => [...newExpenses, ...prev]);
+    if (rule.groupId !== null) {
+      const folderId = groupFolderIdsRef.current[rule.groupId];
+      const session = sessionRef.current;
+      if (session && folderId) {
+        void writeGroupRecurring(session, folderId, updatedRules[0]!);
+        void Promise.all(newExpenses.map((e) => writeGroupExpense(session, folderId, e)));
+      }
+    }
   }, []);
 
   const deleteRecurring = useCallback((id: string) => {
+    const target = recurring.find((r) => r.id === id);
     setRecurring((prev) => prev.filter((r) => r.id !== id));
-  }, []);
+    if (target && target.groupId !== null) {
+      const folderId = groupFolderIdsRef.current[target.groupId];
+      const session = sessionRef.current;
+      if (session && folderId) void deleteGroupRecurring(session, folderId, id);
+    }
+  }, [recurring]);
 
   const toggleRecurringActive = useCallback((id: string) => {
-    setRecurring((prev) => prev.map((r) => (r.id === id ? { ...r, active: !r.active } : r)));
+    setRecurring((prev) => {
+      const next = prev.map((r) => (r.id === id ? { ...r, active: !r.active } : r));
+      const updated = next.find((r) => r.id === id);
+      if (updated && updated.groupId !== null) {
+        const folderId = groupFolderIdsRef.current[updated.groupId];
+        const session = sessionRef.current;
+        if (session && folderId) void writeGroupRecurring(session, folderId, updated);
+      }
+      return next;
+    });
   }, []);
+
+  const createGroup = useCallback(
+    async (g: { name: string; emoji?: string; type: Group['type']; members: Member[] }) => {
+      const session = sessionRef.current;
+      if (!session || !user) return;
+      const bundle = await createGroupFolder(session, g, user.email);
+      groupFolderIdsRef.current[bundle.meta.id] = bundle.folderId;
+      setGroups((prev) => [...prev, { ...bundle.meta }]);
+      navigate({ name: 'group', groupId: bundle.meta.id });
+    },
+    [user, navigate],
+  );
+
+  const inviteToGroup = useCallback(
+    async (groupId: string, member: Member) => {
+      const session = sessionRef.current;
+      const folderId = groupFolderIdsRef.current[groupId];
+      const group = groups.find((gr) => gr.id === groupId);
+      if (!session || !folderId || !group) return;
+      const updated = await inviteMember(session, folderId, group, member);
+      setGroups((prev) => prev.map((gr) => (gr.id === groupId ? { ...gr, members: updated.members } : gr)));
+    },
+    [groups],
+  );
+
+  const recordSettlement = useCallback(
+    (s: { groupId: string; fromUser: string; toUser: string; amountCents: number; note?: string }) => {
+      const settlement: Settlement = { ...s, id: newId(), createdAt: Date.now() };
+      setSettlements((prev) => [settlement, ...prev]);
+      const folderId = groupFolderIdsRef.current[s.groupId];
+      const session = sessionRef.current;
+      if (session && folderId) void writeGroupSettlement(session, folderId, settlement);
+    },
+    [],
+  );
 
   const people = useMemo(() => buildPeople(groups, expenses, settlements), [groups, expenses, settlements]);
 
   const settlePeople = useCallback((apportioned: ApportionedSettlement[]) => {
     if (apportioned.length === 0) return;
     const now = Date.now();
-    setSettlements((prev) => [
-      ...apportioned.map((s) => ({ ...s, id: newId(), createdAt: now })),
-      ...prev,
-    ]);
+    const created = apportioned.map((s) => ({ ...s, id: newId(), createdAt: now }));
+    setSettlements((prev) => [...created, ...prev]);
+    const session = sessionRef.current;
+    if (session) {
+      for (const s of created) {
+        const folderId = groupFolderIdsRef.current[s.groupId];
+        if (folderId) void writeGroupSettlement(session, folderId, s);
+      }
+    }
   }, []);
 
   const showBack = BACK_ROUTES.has(route.name);
@@ -299,11 +526,7 @@ export default function App() {
             settlements={settlements}
             onOpenGroup={(groupId) => navigate({ name: 'group', groupId })}
             onOpenPeople={() => navigate({ name: 'people' })}
-            onCreateGroup={(g) => {
-              const id = newId();
-              setGroups((prev) => [...prev, { ...g, id, createdAt: Date.now() }]);
-              navigate({ name: 'group', groupId: id });
-            }}
+            onCreateGroup={(g) => void createGroup(g)}
           />
         );
       case 'people':
@@ -319,8 +542,9 @@ export default function App() {
             onAddExpense={() => navigate({ name: 'add', presetGroupId: group.id, returnTo: { name: 'group', groupId: group.id } })}
             onEditExpense={(e) => navigate({ name: 'add', editing: e, returnTo: { name: 'group', groupId: group.id } })}
             onDeleteExpense={deleteExpense}
-            onRecordSettlement={(s) => setSettlements((prev) => [{ ...s, id: newId(), createdAt: Date.now() }, ...prev])}
+            onRecordSettlement={recordSettlement}
             onToggleSettled={toggleSettled}
+            onInvite={(member) => void inviteToGroup(group.id, member)}
           />
         );
       }
@@ -445,17 +669,18 @@ export default function App() {
             groupCount={groups.length}
             onOpenReports={() => navigate({ name: 'analysis' })}
             onOpenMileage={() => navigate({ name: 'mileage' })}
-            onSignOut={() => {
-              saveUser(null);
-              setUser(null);
-              navigate({ name: 'home' });
-            }}
+            onSignOut={handleSignOut}
           />
         ) : null;
       default:
         return null;
     }
-  }, [route, expenses, groups, settlements, mileage, budgets, cards, cardPayments, rewardCoins, recurring, people, user, navigate, saveExpense, deleteExpense, payCard, toggleSettled, settlePeople, createRecurring, deleteRecurring, toggleRecurringActive, triggerScan, pendingCapture]);
+  }, [
+    route, expenses, groups, settlements, mileage, budgets, cards, cardPayments, rewardCoins, recurring, people,
+    user, navigate, saveExpense, deleteExpense, payCard, toggleSettled, settlePeople, createRecurring,
+    deleteRecurring, toggleRecurringActive, triggerScan, pendingCapture, createGroup, inviteToGroup,
+    recordSettlement, handleSignOut,
+  ]);
 
   const headerTitle =
     route.name === 'group'
@@ -466,13 +691,36 @@ export default function App() {
         : 'Add expense'
       : TITLES[route.name] ?? '';
 
-  if (loaded && !user) {
+  if (authStatus === 'signedOut' || authStatus === 'signingIn' || (authStatus === 'checking' && !user)) {
     return (
       <View style={styles.page}>
         <View style={styles.phone}>
-          <LoginScreen onSignIn={(u) => { saveUser(u); setUser(u); }} />
+          <LoginScreen onSignIn={handleSignIn} signingIn={authStatus === 'signingIn'} error={authError} />
         </View>
-        <Text style={styles.caption}>Web preview · camera &amp; cloud OCR are stubbed here</Text>
+        <Text style={styles.caption}>Sign-in and expense data are backed by your own Google Drive.</Text>
+      </View>
+    );
+  }
+
+  if (authStatus === 'loadingData' || authStatus === 'checking') {
+    return (
+      <View style={styles.page}>
+        <View style={[styles.phone, styles.centered]}>
+          <Text style={styles.loadingText}>Loading your data from Google Drive…</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (authStatus === 'error') {
+    return (
+      <View style={styles.page}>
+        <View style={[styles.phone, styles.centered]}>
+          <Text style={styles.loadingText}>{authError ?? 'Something went wrong.'}</Text>
+          <Pressable style={styles.retryBtn} onPress={() => user && handleSignIn()}>
+            <Text style={styles.retryText}>Try again</Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
@@ -510,7 +758,7 @@ export default function App() {
         onChange: handleCameraCapture,
         style: { display: 'none' },
       })}
-      <Text style={styles.caption}>Web preview · camera &amp; cloud OCR are stubbed here</Text>
+      <Text style={styles.caption}>Signed in as {user?.email}</Text>
     </View>
   );
 }
@@ -529,6 +777,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#dfe6e6',
   } as object,
+  centered: { alignItems: 'center', justifyContent: 'center', padding: 24 },
+  loadingText: { color: COLORS.subtext, fontSize: 15, fontWeight: '600', textAlign: 'center' },
+  retryBtn: { marginTop: 16, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12, backgroundColor: COLORS.primary },
+  retryText: { color: '#fff', fontWeight: '700' },
   header: {
     height: 56,
     flexDirection: 'row',

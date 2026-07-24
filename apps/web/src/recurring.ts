@@ -27,7 +27,7 @@ export function frequencyLabel(frequency: RecurringExpense['frequency'], interva
 
 const MAX_CATCHUP = 24;
 
-function buildOccurrenceExpense(rule: RecurringExpense, dateISO: string): Expense {
+function buildOccurrenceExpense(rule: RecurringExpense, dateISO: string, id: string): Expense {
   const participants: SplitParticipantInput[] = rule.groupId
     ? rule.involvedIds.map((id) => ({
         userId: id,
@@ -49,7 +49,7 @@ function buildOccurrenceExpense(rule: RecurringExpense, dateISO: string): Expens
   const paidBy: Payment[] = [{ userId: rule.groupId ? rule.paidBy : ME, cents: rule.amountCents }];
 
   return {
-    id: newId(),
+    id,
     createdAt: Date.now(),
     description: rule.description,
     amountCents: rule.amountCents,
@@ -76,8 +76,18 @@ export interface MaterializeResult {
   updatedRules: RecurringExpense[];
 }
 
-/** Catch up every active rule whose nextDueISO is on/before todayISO. Pure — the caller persists the result. */
-export function materializeDueRecurring(rules: RecurringExpense[], todayISO: string): MaterializeResult {
+/**
+ * Catch up every active rule whose nextDueISO is on/before todayISO. Pure —
+ * the caller persists the result. `makeId` defaults to a random id (personal
+ * rules, single writer); group rules pass a deterministic id derived from the
+ * rule + occurrence date, so two members' clients racing to catch up the same
+ * overdue occurrence can be de-duplicated by the caller before persisting.
+ */
+export function materializeDueRecurring(
+  rules: RecurringExpense[],
+  todayISO: string,
+  makeId: (rule: RecurringExpense, dateISO: string) => string = () => newId(),
+): MaterializeResult {
   const newExpenses: Expense[] = [];
   const updatedRules = rules.map((r) => ({ ...r }));
 
@@ -85,7 +95,7 @@ export function materializeDueRecurring(rules: RecurringExpense[], todayISO: str
     if (!rule.active) continue;
     let guard = 0;
     while (rule.nextDueISO <= todayISO && guard < MAX_CATCHUP) {
-      newExpenses.push(buildOccurrenceExpense(rule, rule.nextDueISO));
+      newExpenses.push(buildOccurrenceExpense(rule, rule.nextDueISO, makeId(rule, rule.nextDueISO)));
       rule.occurrenceCount += 1;
       rule.nextDueISO = addPeriod(rule.nextDueISO, rule.frequency, rule.interval);
       guard += 1;

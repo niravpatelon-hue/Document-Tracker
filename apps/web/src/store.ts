@@ -17,10 +17,23 @@ import { AVATAR_COLORS } from './theme';
 
 export type { SplitType };
 
-/** The signed-in user's own id inside every group's member list. */
-export const ME = 'me';
+/**
+ * The signed-in user's own id inside every group's member list — their Google
+ * account email, since Drive sharing (the app's real access-control mechanism)
+ * is itself email-addressed. This is a live binding, not a constant: it starts
+ * empty and is set once by `setCurrentUser` right after Google sign-in
+ * resolves, before anything reads it. Every importer sees the same live value
+ * (ES module bindings are references, not copies), so the rest of the app can
+ * keep using the bare `ME` identifier exactly as before.
+ */
+export let ME = '';
+
+export function setCurrentUser(email: string): void {
+  ME = email;
+}
 
 export interface Member {
+  /** The member's Google account email — also the Drive-sharing address. */
   id: string;
   name: string;
   /** UPI VPA (id@bank) for settle-up deep links. */
@@ -149,6 +162,7 @@ export interface CardPayment {
 export interface WebUser {
   name: string;
   email: string;
+  picture?: string;
 }
 
 export type RecurringFrequency = 'weekly' | 'monthly' | 'yearly';
@@ -253,8 +267,8 @@ export interface PersistedState {
   recurring: RecurringExpense[];
 }
 
-const STORAGE_KEY = 'expense-split-app-v2';
 const USER_KEY = 'expense-split-user-v1';
+const cacheKey = (email: string) => `expense-split-app-v2:${email}`;
 
 export function newId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -317,29 +331,38 @@ function normalizeState(raw: any): PersistedState {
   };
 }
 
-export function loadState(): PersistedState | null {
+/**
+ * Per-user local cache of the Drive-backed state — Drive is the source of
+ * truth for collaboration, this is only for instant paint on load and an
+ * offline fallback if a Drive call fails. Keyed by email so switching Google
+ * accounts on the same browser never leaks one user's cache into another's.
+ */
+export function loadLocalCache(email: string): PersistedState | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(cacheKey(email));
     return raw ? normalizeState(JSON.parse(raw)) : null;
   } catch {
     return null;
   }
 }
 
-export function saveState(state: PersistedState): void {
+export function saveLocalCache(email: string, state: PersistedState): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(cacheKey(email), JSON.stringify(state));
   } catch {
-    /* non-fatal in preview */
+    /* non-fatal — Drive remains the source of truth */
   }
 }
 
+/** Last signed-in profile, cached only so the UI can paint a name/picture instantly before Google re-auth resolves. */
 export function loadUser(): WebUser | null {
   try {
     const raw = localStorage.getItem(USER_KEY);
     if (!raw) return null;
     const u = JSON.parse(raw);
-    return u && typeof u.email === 'string' ? { name: String(u.name ?? ''), email: String(u.email) } : null;
+    return u && typeof u.email === 'string'
+      ? { name: String(u.name ?? ''), email: String(u.email), picture: u.picture ? String(u.picture) : undefined }
+      : null;
   } catch {
     return null;
   }

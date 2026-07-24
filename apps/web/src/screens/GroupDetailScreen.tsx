@@ -16,7 +16,7 @@ import {
   Pill,
   SectionLabel,
 } from '../components/ui';
-import { ME, myNetForExpense, type Expense, type Group, type Settlement } from '../store';
+import { ME, myNetForExpense, type Expense, type Group, type Member, type Settlement } from '../store';
 
 interface Props {
   group: Group;
@@ -28,6 +28,8 @@ interface Props {
   onRecordSettlement: (s: { groupId: string; fromUser: string; toUser: string; amountCents: number; note?: string }) => void;
   /** Toggle the cosmetic "settled/paid" flag on an expense. Display-only; never affects balance math. */
   onToggleSettled?: (id: string) => void;
+  /** Invite a new member by their Google email — shares this group's Drive folder with them. */
+  onInvite: (member: Member) => void;
 }
 
 export default function GroupDetailScreen({
@@ -39,9 +41,26 @@ export default function GroupDetailScreen({
   onDeleteExpense,
   onRecordSettlement,
   onToggleSettled,
+  onInvite,
 }: Props) {
   const nameOf = (id: string) => group.members.find((m) => m.id === id)?.name ?? id;
   const memberOf = (id: string) => group.members.find((m) => m.id === id);
+
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteName, setInviteName] = useState('');
+  const [inviteError, setInviteError] = useState<string | null>(null);
+
+  function submitInvite() {
+    const email = inviteEmail.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(email)) return setInviteError('Enter a valid Google email address.');
+    if (group.members.some((m) => m.id === email)) return setInviteError('Already a member.');
+    onInvite({ id: email, name: inviteName.trim() || email.split('@')[0]! });
+    setInviteEmail('');
+    setInviteName('');
+    setInviteError(null);
+    setInviteOpen(false);
+  }
 
   const { balances, transfers } = useMemo(() => {
     const b = computeNetBalances(
@@ -94,6 +113,39 @@ export default function GroupDetailScreen({
           style={{ flex: 1 }}
         />
       </View>
+
+      <View style={styles.membersHeaderRow}>
+        <SectionLabel>Members</SectionLabel>
+        <Text style={styles.inviteLink} onPress={() => setInviteOpen((v) => !v)}>
+          {inviteOpen ? 'Cancel' : '+ Invite'}
+        </Text>
+      </View>
+      <Card style={{ marginBottom: inviteOpen ? 10 : 14 }}>
+        <View style={styles.chipsRow}>
+          {group.members.map((m) => (
+            <Pill key={m.id} label={m.id === ME ? 'You' : m.name} />
+          ))}
+        </View>
+      </Card>
+      {inviteOpen && (
+        <Card style={{ marginBottom: 14 }}>
+          <Text style={styles.smallLabel}>Invite by Google email</Text>
+          <Field
+            value={inviteEmail}
+            onChangeText={setInviteEmail}
+            placeholder="friend@gmail.com"
+            keyboardType="email-address"
+          />
+          <Field
+            value={inviteName}
+            onChangeText={setInviteName}
+            placeholder="Display name (optional)"
+            style={{ marginTop: 10 }}
+          />
+          {inviteError ? <Text style={styles.inviteError}>{inviteError}</Text> : null}
+          <Button label="Send invite" icon="check" onPress={submitInvite} style={{ marginTop: 12 }} />
+        </Card>
+      )}
 
       <SectionLabel>Balances</SectionLabel>
       <Card>
@@ -251,6 +303,9 @@ const styles = StyleSheet.create({
   heroCap: { color: COLORS.subtext, fontWeight: '700', fontSize: 12.5 },
   heroSub: { color: COLORS.subtext, fontSize: 13, marginTop: 2 },
   actionRow: { flexDirection: 'row', gap: 10, marginTop: 14, marginBottom: 4 },
+  membersHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  inviteLink: { color: COLORS.primary, fontWeight: '700', fontSize: 13 },
+  inviteError: { color: COLORS.danger, fontSize: 12, fontWeight: '600', marginTop: 8 },
   balRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10 },
   balLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   balName: { fontSize: 15, color: COLORS.ink, fontWeight: '700' },
