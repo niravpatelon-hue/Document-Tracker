@@ -151,6 +151,47 @@ export interface WebUser {
   email: string;
 }
 
+export type RecurringFrequency = 'weekly' | 'monthly' | 'yearly';
+
+export interface RecurringParticipantValue {
+  userId: string;
+  value?: number;
+}
+
+/**
+ * A recurring-expense rule (e.g. "Rent, ₹15,000, every month, split with
+ * Flatmates"). It never mutates the ledger by itself — @/recurring.ts reads
+ * these on app load and materializes a real Expense for every elapsed period,
+ * advancing nextDueISO past today. Editing a rule only changes future
+ * occurrences; past-generated Expenses are independent records.
+ */
+export interface RecurringExpense {
+  id: string;
+  description: string;
+  amountCents: number;
+  category: string;
+  frequency: RecurringFrequency;
+  /** Fire every N periods (e.g. every 2 weeks). Minimum 1. */
+  interval: number;
+  /** ISO date of the very first occurrence. */
+  startDateISO: string;
+  /** ISO date of the next occurrence still to be generated. */
+  nextDueISO: string;
+  /** null = personal recurring expense; otherwise auto-split in this group. */
+  groupId: string | null;
+  /** Single payer member id (only meaningful when groupId is set). */
+  paidBy: string;
+  /** Participants (only meaningful when groupId is set; personal is always [ME]). */
+  involvedIds: string[];
+  splitType: SplitType;
+  /** Raw per-participant split values, mirrors SplitParticipantInput (percent / exact paise / share / adjustment paise). */
+  participantValues: RecurringParticipantValue[];
+  notes?: string;
+  active: boolean;
+  occurrenceCount: number;
+  createdAt: number;
+}
+
 /** Spend categories (aligned with @domain classifySpendCategory outputs) + tints. */
 export const EXPENSE_CATEGORIES: { key: string; icon: string; color: string }[] = [
   { key: 'General', icon: '🧾', color: '#6B7C8F' },
@@ -209,6 +250,7 @@ export interface PersistedState {
   cardPayments: CardPayment[];
   /** Redeemable reward coins earned on card bill payments. */
   rewardCoins: number;
+  recurring: RecurringExpense[];
 }
 
 const STORAGE_KEY = 'expense-split-app-v2';
@@ -222,7 +264,7 @@ export function newId(): string {
 }
 
 export function emptyState(): PersistedState {
-  return { expenses: [], groups: [], settlements: [], mileage: [], budgets: [], cards: [], cardPayments: [], rewardCoins: 0 };
+  return { expenses: [], groups: [], settlements: [], mileage: [], budgets: [], cards: [], cardPayments: [], rewardCoins: 0, recurring: [] };
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -271,6 +313,7 @@ function normalizeState(raw: any): PersistedState {
     cards: Array.isArray(raw?.cards) ? raw.cards : [],
     cardPayments: Array.isArray(raw?.cardPayments) ? raw.cardPayments : [],
     rewardCoins: Number(raw?.rewardCoins) || 0,
+    recurring: Array.isArray(raw?.recurring) ? raw.recurring : [],
   };
 }
 

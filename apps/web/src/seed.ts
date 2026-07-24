@@ -1,4 +1,4 @@
-import { ME, type Budget, type CardPayment, type CreditCard, type Expense, type Group, type MileageTrip, type PersistedState, type Settlement } from './store';
+import { ME, type Budget, type CardPayment, type CreditCard, type Expense, type Group, type MileageTrip, type PersistedState, type RecurringExpense, type Settlement } from './store';
 
 const DAY = 86_400_000;
 
@@ -159,7 +159,22 @@ export function seedState(): PersistedState {
     if (c) e.cardId = c;
   }
 
-  return { expenses, groups, settlements, mileage, budgets, cards, cardPayments, rewardCoins: 24500 };
+  const recurring: RecurringExpense[] = [
+    {
+      id: 'rec-netflix', description: 'Netflix', amountCents: 64900, category: 'Entertainment',
+      frequency: 'monthly', interval: 1, startDateISO: '2026-06-28', nextDueISO: '2026-07-28',
+      groupId: null, paidBy: ME, involvedIds: [ME], splitType: 'equal', participantValues: [],
+      active: true, occurrenceCount: 1, createdAt: now - DAY * 26,
+    },
+    {
+      id: 'rec-wifi', description: 'Wifi bill', amountCents: 120000, category: 'Utilities',
+      frequency: 'monthly', interval: 1, startDateISO: '2026-07-01', nextDueISO: '2026-08-01',
+      groupId: 'g-flat', paidBy: ME, involvedIds: flatMembers, splitType: 'equal', participantValues: [],
+      active: true, occurrenceCount: 1, createdAt: now - DAY * 23,
+    },
+  ];
+
+  return { expenses, groups, settlements, mileage, budgets, cards, cardPayments, rewardCoins: 24500, recurring };
 }
 
 /** A realistic receipt blob for the "use sample" scan button — parsed by the real field parser. */

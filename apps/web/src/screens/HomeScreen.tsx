@@ -35,6 +35,7 @@ import {
   type CreditCard,
   type Expense,
   type Group,
+  type RecurringExpense,
   type Settlement,
 } from '../store';
 
@@ -45,6 +46,7 @@ interface Props {
   settlements: Settlement[];
   cards: CreditCard[];
   budgets: Budget[];
+  recurring: RecurringExpense[];
   onScan: () => void;
   onAddExpense: () => void;
   onOpenPersonal: () => void;
@@ -53,6 +55,8 @@ interface Props {
   onOpenOptimize: () => void;
   onOpenCards: () => void;
   onOpenGroup: (groupId: string) => void;
+  onOpenRecurring: () => void;
+  onOpenChat: () => void;
 }
 
 const MONTHS = [
@@ -137,6 +141,7 @@ export default function HomeScreen({
   settlements,
   cards,
   budgets,
+  recurring,
   onScan,
   onAddExpense,
   onOpenPersonal,
@@ -145,6 +150,8 @@ export default function HomeScreen({
   onOpenOptimize,
   onOpenCards,
   onOpenGroup,
+  onOpenRecurring,
+  onOpenChat,
 }: Props) {
   const firstName = useMemo(() => {
     const n = (userName ?? '').trim();
@@ -250,6 +257,16 @@ export default function HomeScreen({
     return { outstanding, dueSoon, count: cards.length };
   }, [cards]);
 
+  /** Active-count + soonest-due blurb for the Recurring tile. */
+  const recurringStats = useMemo(() => {
+    const active = recurring.filter((r) => r.active);
+    if (active.length === 0) return { count: 0, sub: 'Auto-split bills & rent' };
+    const next = active.slice().sort((a, b) => (a.nextDueISO < b.nextDueISO ? -1 : 1))[0]!;
+    const d = daysUntil(next.nextDueISO);
+    const when = d <= 0 ? 'due today' : d === 1 ? 'due in 1 day' : `due in ${d} days`;
+    return { count: active.length, sub: `Next ${when}` };
+  }, [recurring]);
+
   const topGroups = useMemo(() => groups.slice(0, 3), [groups]);
 
   const recent = useMemo(
@@ -258,6 +275,7 @@ export default function HomeScreen({
   );
 
   return (
+    <View style={styles.root}>
     <ScrollView style={styles.container} contentContainerStyle={styles.scroll}>
       {/* Header */}
       <View style={styles.header}>
@@ -342,7 +360,15 @@ export default function HomeScreen({
             badge={cardStats.dueSoon ? 'Due soon' : undefined}
             onPress={onOpenCards}
           />
-          <View style={styles.tileSpacer} />
+          <FeatureTile
+            icon="calendar"
+            iconColor={COLORS.info}
+            iconBg={COLORS.chip}
+            title="Recurring"
+            stat={recurringStats.count === 0 ? 'None yet' : `${recurringStats.count} active`}
+            sub={recurringStats.sub}
+            onPress={onOpenRecurring}
+          />
         </View>
       </View>
 
@@ -426,12 +452,31 @@ export default function HomeScreen({
 
       <View style={{ height: 12 }} />
     </ScrollView>
+
+      {/* Floating AI assistant button */}
+      <Pressable style={styles.aiFab} onPress={onOpenChat} accessibilityLabel="Ask AI about your spending">
+        <Icon name="sparkles" color="#fff" size={22} />
+      </Pressable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
   container: { flex: 1, backgroundColor: COLORS.screenBg },
   scroll: { padding: 16, paddingBottom: 28 },
+  aiFab: {
+    position: 'absolute',
+    right: 18,
+    bottom: 18,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: COLORS.primaryDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 10px 20px -6px rgba(29,58,138,0.55)',
+  } as object,
 
   header: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
   hi: { color: COLORS.ink, fontWeight: '900', fontSize: 24, letterSpacing: 0.2 },
@@ -453,7 +498,6 @@ const styles = StyleSheet.create({
   grid: { marginTop: 18, gap: 12 },
   gridRow: { flexDirection: 'row', gap: 12 },
   tile: { flex: 1, borderRadius: 20, padding: 14, minHeight: 118 },
-  tileSpacer: { flex: 1 },
   tileHighlight: { backgroundColor: COLORS.primarySoft },
   tileTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   tileBadge: {

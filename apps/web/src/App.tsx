@@ -14,16 +14,19 @@ import {
   type Expense,
   type Group,
   type MileageTrip,
+  type RecurringExpense,
   type Settlement,
   type WebUser,
 } from './store';
 import { seedState } from './seed';
 import { buildPeople, type ApportionedSettlement } from './people';
+import { materializeDueRecurring } from './recurring';
 import HomeScreen from './screens/HomeScreen';
 import PersonalScreen from './screens/PersonalScreen';
 import GroupsScreen from './screens/GroupsScreen';
 import GroupDetailScreen from './screens/GroupDetailScreen';
 import PeopleScreen from './screens/PeopleScreen';
+import RecurringScreen from './screens/RecurringScreen';
 import AnalysisScreen from './screens/AnalysisScreen';
 import OptimizeScreen from './screens/OptimizeScreen';
 import ChatScreen from './screens/ChatScreen';
@@ -58,6 +61,7 @@ type Route =
   | { name: 'analysis' }
   | { name: 'optimize' }
   | { name: 'chat' }
+  | { name: 'recurring' }
   | { name: 'cards' }
   | { name: 'cardDetail'; cardId: string }
   | { name: 'cardPay'; cardId: string; fromDetail?: boolean }
@@ -74,12 +78,13 @@ const TITLES: Record<string, string> = {
   scan: 'Scan receipt',
   mileage: 'Mileage',
   chat: 'Ask AI',
+  recurring: 'Recurring',
 };
 
 // Only these three are true bottom tabs; everything else is a drill-in with a back arrow.
 const TAB_ROUTES = new Set(['home', 'cards', 'account']);
 const BACK_ROUTES = new Set([
-  'group', 'scan', 'add', 'optimize', 'mileage', 'personal', 'groups', 'analysis', 'people', 'chat',
+  'group', 'scan', 'add', 'optimize', 'mileage', 'personal', 'groups', 'analysis', 'people', 'chat', 'recurring',
 ]);
 // Screens that render full-bleed with their own top bar — the app chrome is omitted.
 const NO_CHROME = new Set(['home', 'cards', 'cardDetail', 'cardPay']);
@@ -100,6 +105,7 @@ export default function App() {
   const [cards, setCards] = useState<CreditCard[]>([]);
   const [cardPayments, setCardPayments] = useState<CardPayment[]>([]);
   const [rewardCoins, setRewardCoins] = useState(0);
+  const [recurring, setRecurring] = useState<RecurringExpense[]>([]);
   const [user, setUser] = useState<WebUser | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -113,15 +119,31 @@ export default function App() {
     setCards(s.cards ?? []);
     setCardPayments(s.cardPayments ?? []);
     setRewardCoins(s.rewardCoins ?? 0);
+    setRecurring(s.recurring ?? []);
     setUser(loadUser());
     setLoaded(true);
   }, []);
 
   useEffect(() => {
     if (loaded) {
-      saveState({ expenses, groups, settlements, mileage, budgets, cards, cardPayments, rewardCoins });
+      saveState({ expenses, groups, settlements, mileage, budgets, cards, cardPayments, rewardCoins, recurring });
     }
-  }, [expenses, groups, settlements, mileage, budgets, cards, cardPayments, rewardCoins, loaded]);
+  }, [expenses, groups, settlements, mileage, budgets, cards, cardPayments, rewardCoins, recurring, loaded]);
+
+  // Catch up any recurring rules whose next occurrence has already arrived —
+  // runs once right after hydration (not on every `recurring` change, which
+  // this same effect writes to).
+  useEffect(() => {
+    if (!loaded) return;
+    setRecurring((currentRules) => {
+      const { newExpenses, updatedRules } = materializeDueRecurring(currentRules, todayISO());
+      if (newExpenses.length > 0) {
+        setExpenses((prev) => [...newExpenses, ...prev]);
+      }
+      return updatedRules;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
 
   const navigate = useCallback((next: Route) => setRoute(next), []);
 
@@ -147,6 +169,21 @@ export default function App() {
     },
     [cards],
   );
+
+  const createRecurring = useCallback((input: Omit<RecurringExpense, 'id' | 'createdAt' | 'nextDueISO' | 'occurrenceCount'>) => {
+    const rule: RecurringExpense = { ...input, id: newId(), createdAt: Date.now(), nextDueISO: input.startDateISO, occurrenceCount: 0 };
+    const { newExpenses, updatedRules } = materializeDueRecurring([rule], todayISO());
+    setRecurring((prev) => [...updatedRules, ...prev]);
+    if (newExpenses.length > 0) setExpenses((prev) => [...newExpenses, ...prev]);
+  }, []);
+
+  const deleteRecurring = useCallback((id: string) => {
+    setRecurring((prev) => prev.filter((r) => r.id !== id));
+  }, []);
+
+  const toggleRecurringActive = useCallback((id: string) => {
+    setRecurring((prev) => prev.map((r) => (r.id === id ? { ...r, active: !r.active } : r)));
+  }, []);
 
   const people = useMemo(() => buildPeople(groups, expenses, settlements), [groups, expenses, settlements]);
 
@@ -207,6 +244,9 @@ export default function App() {
             onOpenOptimize={() => navigate({ name: 'optimize' })}
             onOpenCards={() => navigate({ name: 'cards' })}
             onOpenGroup={(groupId) => navigate({ name: 'group', groupId })}
+            recurring={recurring}
+            onOpenRecurring={() => navigate({ name: 'recurring' })}
+            onOpenChat={() => navigate({ name: 'chat' })}
           />
         );
       case 'personal':
@@ -279,6 +319,16 @@ export default function App() {
         );
       case 'chat':
         return <ChatScreen expenses={expenses} budgets={budgets} cards={cards} />;
+      case 'recurring':
+        return (
+          <RecurringScreen
+            recurring={recurring}
+            groups={groups}
+            onCreate={createRecurring}
+            onDelete={deleteRecurring}
+            onToggleActive={toggleRecurringActive}
+          />
+        );
       case 'cards':
         return (
           <CardsScreen
@@ -374,7 +424,7 @@ export default function App() {
       default:
         return null;
     }
-  }, [route, expenses, groups, settlements, mileage, budgets, cards, cardPayments, rewardCoins, people, user, navigate, saveExpense, payCard, toggleSettled, settlePeople]);
+  }, [route, expenses, groups, settlements, mileage, budgets, cards, cardPayments, rewardCoins, recurring, people, user, navigate, saveExpense, payCard, toggleSettled, settlePeople, createRecurring, deleteRecurring, toggleRecurringActive]);
 
   const headerTitle =
     route.name === 'group'
